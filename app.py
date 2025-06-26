@@ -1302,7 +1302,25 @@ def gestionar_prestamos():
         
         conn = db.get_connection()
         
-        # Obtener préstamos activos de forma simple
+        # DEBUG: Mostrar información de debug
+        st.markdown("### 🔍 Debug - Verificando elementos prestados")
+        debug_query = """
+            SELECT p.id, p.estado as estado_prestamo, e.estado as estado_elemento, e.codigo, e.nombre,
+                   b.nombre as beneficiario, h.nombre as hermano
+            FROM prestamos p
+            JOIN elementos e ON p.elemento_id = e.id
+            JOIN beneficiarios b ON p.beneficiario_id = b.id
+            JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            ORDER BY p.id DESC
+        """
+        debug_df = pd.read_sql_query(debug_query, conn)
+        if not debug_df.empty:
+            st.markdown("**Todos los préstamos en el sistema:**")
+            st.dataframe(debug_df)
+        else:
+            st.warning("No hay préstamos en el sistema")
+        
+        # Consulta CORREGIDA para obtener préstamos activos
         prestamos_activos = pd.read_sql_query("""
             SELECT p.id, p.fecha_prestamo, p.fecha_devolucion_estimada,
                    e.id as elemento_id, e.codigo, e.nombre as elemento,
@@ -1322,6 +1340,8 @@ def gestionar_prestamos():
             WHERE p.estado = 'activo'
             ORDER BY p.fecha_devolucion_estimada ASC
         """, conn)
+        
+        st.markdown(f"### 📊 Elementos encontrados para devolución: {len(prestamos_activos)}")
         
         if not prestamos_activos.empty:
             st.markdown("### 📋 Elementos Disponibles para Devolución")
@@ -1401,7 +1421,7 @@ def gestionar_prestamos():
                                             format_func=lambda x: depositos_disponibles[depositos_disponibles['id'] == x]['nombre'].iloc[0]
                                         )
                                     else:
-                                        st.error("No hay depósitos disponibles")
+                                        st.error("⚠️ No hay depósitos disponibles. Debe crear al menos un depósito primero.")
                                         deposito_devolucion_id = None
                                     
                                     estado_elemento = st.selectbox("Estado del elemento:", ["Bueno", "Regular", "Necesita Mantenimiento"])
@@ -1421,8 +1441,10 @@ def gestionar_prestamos():
                                                 # Determinar estado final del elemento
                                                 if estado_elemento == "Necesita Mantenimiento":
                                                     estado_final = "mantenimiento"
+                                                    mensaje_estado = "marcado para mantenimiento"
                                                 else:
                                                     estado_final = "disponible"
+                                                    mensaje_estado = "disponible para préstamo"
                                                 
                                                 # Actualizar préstamo
                                                 observaciones_completas = f"Estado: {estado_elemento}. {observaciones}".strip()
@@ -1443,22 +1465,23 @@ def gestionar_prestamos():
                                                 conn.commit()
                                                 
                                                 st.success(f"""
-                                                ✅ **Devolución Registrada**
+                                                ✅ **Devolución Registrada Exitosamente**
                                                 
                                                 📦 **Elemento:** {prestamo['codigo']} - {prestamo['elemento']}  
                                                 👤 **Recibido por:** {recibido_por}  
                                                 📅 **Fecha:** {fecha_devolucion}  
-                                                📊 **Estado:** {estado_final}
+                                                📊 **Estado:** {mensaje_estado}
                                                 """)
                                                 
                                                 del st.session_state[f'devolver_simple_{prestamo["id"]}']
+                                                st.balloons()
                                                 time.sleep(2)
                                                 st.rerun()
                                                 
                                             except Exception as e:
-                                                st.error(f"❌ Error: {e}")
+                                                st.error(f"❌ Error al procesar devolución: {e}")
                                         else:
-                                            st.error("❌ Campos obligatorios faltantes")
+                                            st.error("❌ Campos obligatorios: 'Recibido por' y 'Depósito de Destino'")
                                 
                                 with col_action2:
                                     if st.form_submit_button("❌ Cancelar", use_container_width=True):
@@ -1468,10 +1491,23 @@ def gestionar_prestamos():
                         st.markdown("---")
             else:
                 st.warning("❌ No se encontraron elementos con los filtros aplicados")
+                st.markdown("**Sugerencias:**")
+                st.markdown("- Verifica los filtros aplicados")
+                st.markdown("- Cambia el filtro de estado a 'Todos'")
         
         else:
             st.info("ℹ️ **No hay elementos prestados actualmente**")
             st.markdown("Para registrar un nuevo préstamo, ve a la pestaña **'Nuevo Préstamo'**")
+            
+            # Mostrar información de ayuda
+            st.markdown("### 🔍 Posibles causas:")
+            st.markdown("1. **No hay préstamos registrados** - Primero debes registrar un préstamo")
+            st.markdown("2. **Todos los préstamos ya fueron devueltos** - Revisa el historial")
+            st.markdown("3. **Error en la base de datos** - Verifica que los elementos estén marcados como 'prestado'")
+            
+            # Botón para forzar recarga
+            if st.button("🔄 Recargar Datos"):
+                st.rerun()
         
         conn.close()
     
@@ -1536,18 +1572,21 @@ def gestionar_depositos():
     """Gestión de depósitos"""
     st.header("🏢 Gestión de Depósitos")
     
+    # Mostrar información importante
+    st.info("⚠️ **IMPORTANTE:** Debe tener al menos un depósito registrado para poder gestionar elementos y devoluciones.")
+    
     col1, col2 = st.columns([1, 2])
     
     with col1:
         st.subheader("Nuevo Depósito")
         with st.form("deposito_form"):
-            nombre = st.text_input("Nombre del Depósito*")
-            direccion = st.text_area("Dirección")
-            responsable = st.text_input("Responsable")
-            telefono = st.text_input("Teléfono")
-            email = st.text_input("Email")
+            nombre = st.text_input("Nombre del Depósito*", placeholder="Ej: Depósito Central, Almacén Norte")
+            direccion = st.text_area("Dirección", placeholder="Dirección física del depósito")
+            responsable = st.text_input("Responsable", placeholder="Nombre del responsable")
+            telefono = st.text_input("Teléfono", placeholder="Teléfono de contacto")
+            email = st.text_input("Email", placeholder="Email de contacto")
             
-            if st.form_submit_button("Guardar Depósito"):
+            if st.form_submit_button("💾 Guardar Depósito", use_container_width=True):
                 if nombre:
                     try:
                         conn = db.get_connection()
@@ -1558,12 +1597,30 @@ def gestionar_depositos():
                         """, (nombre, direccion, responsable, telefono, email))
                         conn.commit()
                         conn.close()
-                        st.success("Depósito guardado exitosamente")
+                        st.success("✅ Depósito guardado exitosamente")
                         st.rerun()
                     except sqlite3.IntegrityError:
-                        st.error("Ya existe un depósito con ese nombre")
+                        st.error("❌ Ya existe un depósito con ese nombre")
                 else:
-                    st.error("El nombre del depósito es obligatorio")
+                    st.error("❌ El nombre del depósito es obligatorio")
+        
+        # Botón para crear depósito por defecto
+        st.markdown("---")
+        st.markdown("#### 🚀 Inicio Rápido")
+        if st.button("📦 Crear Depósito por Defecto", help="Crea un depósito básico para empezar"):
+            try:
+                conn = db.get_connection()
+                cursor = conn.cursor()
+                cursor.execute("""
+                    INSERT OR IGNORE INTO depositos (nombre, direccion, responsable)
+                    VALUES (?, ?, ?)
+                """, ("Depósito Principal", "Dirección del BEO", "Administrador BEO"))
+                conn.commit()
+                conn.close()
+                st.success("✅ Depósito por defecto creado")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Error: {e}")
     
     with col2:
         st.subheader("Depósitos Registrados")
@@ -1573,8 +1630,12 @@ def gestionar_depositos():
         
         if not depositos_df.empty:
             st.dataframe(depositos_df, use_container_width=True)
+            st.success(f"✅ {len(depositos_df)} depósito(s) registrado(s)")
         else:
-            st.info("No hay depósitos registrados")
+            st.warning("⚠️ **No hay depósitos registrados**")
+            st.markdown("**Para usar el sistema necesitas crear al menos un depósito:**")
+            st.markdown("1. Completa el formulario de la izquierda, o")
+            st.markdown("2. Usa el botón 'Crear Depósito por Defecto'")
 
 def mostrar_dashboard():
     """Dashboard con estadísticas y gráficos"""
@@ -1582,6 +1643,40 @@ def mostrar_dashboard():
     
     conn = db.get_connection()
     
+    # Verificar configuración básica del sistema
+    depositos_count = pd.read_sql_query("SELECT COUNT(*) as total FROM depositos", conn).iloc[0]['total']
+    logias_count = pd.read_sql_query("SELECT COUNT(*) as total FROM logias", conn).iloc[0]['total']
+    hermanos_count = pd.read_sql_query("SELECT COUNT(*) as total FROM hermanos WHERE activo = 1", conn).iloc[0]['total']
+    
+    if depositos_count == 0 or logias_count == 0 or hermanos_count == 0:
+        st.warning("⚠️ **Configuración Incompleta del Sistema**")
+        st.markdown("Para usar completamente el sistema, necesitas:")
+        
+        col_config1, col_config2, col_config3 = st.columns(3)
+        with col_config1:
+            if depositos_count == 0:
+                st.error("❌ **Depósitos**: 0 registrados")
+                st.markdown("Ir a: Gestión de Depósitos")
+            else:
+                st.success(f"✅ **Depósitos**: {depositos_count} registrados")
+        
+        with col_config2:
+            if logias_count == 0:
+                st.error("❌ **Logias**: 0 registradas")
+                st.markdown("Ir a: Gestión de Logias")
+            else:
+                st.success(f"✅ **Logias**: {logias_count} registradas")
+        
+        with col_config3:
+            if hermanos_count == 0:
+                st.error("❌ **Hermanos**: 0 registrados")
+                st.markdown("Ir a: Gestión de Hermanos")
+            else:
+                st.success(f"✅ **Hermanos**: {hermanos_count} registrados")
+        
+        st.markdown("---")
+    
+    # Métricas principales
     col1, col2, col3, col4 = st.columns(4)
     
     total_elementos = pd.read_sql_query("SELECT COUNT(*) as total FROM elementos", conn).iloc[0]['total']
@@ -1598,50 +1693,92 @@ def mostrar_dashboard():
     with col4:
         st.metric("👨‍🤝‍👨 Hermanos Activos", total_hermanos)
     
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🦽 Elementos por Categoría")
-        elementos_categoria = pd.read_sql_query("""
-            SELECT c.nombre, COUNT(e.id) as cantidad
-            FROM categorias c
-            LEFT JOIN elementos e ON c.id = e.categoria_id
-            GROUP BY c.id, c.nombre
-            ORDER BY cantidad DESC
-        """, conn)
-        
-        if not elementos_categoria.empty:
-            fig = px.pie(elementos_categoria, values='cantidad', names='nombre')
-            st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        st.subheader("📊 Estado de Elementos")
-        estado_elementos = pd.read_sql_query("""
+    # Información de debug del sistema
+    if total_elementos > 0:
+        st.markdown("### 🔍 Estado Detallado del Sistema")
+        elementos_por_estado = pd.read_sql_query("""
             SELECT estado, COUNT(*) as cantidad
             FROM elementos
             GROUP BY estado
         """, conn)
         
-        if not estado_elementos.empty:
-            fig = px.bar(estado_elementos, x='estado', y='cantidad')
-            st.plotly_chart(fig, use_container_width=True)
+        if not elementos_por_estado.empty:
+            col_debug1, col_debug2 = st.columns(2)
+            with col_debug1:
+                st.markdown("**Elementos por Estado:**")
+                for _, row in elementos_por_estado.iterrows():
+                    st.write(f"- {row['estado']}: {row['cantidad']}")
+            
+            with col_debug2:
+                # Verificar préstamos activos con más detalle
+                prestamos_detalle = pd.read_sql_query("""
+                    SELECT p.estado as estado_prestamo, COUNT(*) as cantidad
+                    FROM prestamos p
+                    GROUP BY p.estado
+                """, conn)
+                
+                if not prestamos_detalle.empty:
+                    st.markdown("**Préstamos por Estado:**")
+                    for _, row in prestamos_detalle.iterrows():
+                        st.write(f"- {row['estado_prestamo']}: {row['cantidad']}")
     
+    # Gráficos solo si hay datos
+    if total_elementos > 0:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.subheader("🦽 Elementos por Categoría")
+            elementos_categoria = pd.read_sql_query("""
+                SELECT c.nombre, COUNT(e.id) as cantidad
+                FROM categorias c
+                LEFT JOIN elementos e ON c.id = e.categoria_id
+                GROUP BY c.id, c.nombre
+                ORDER BY cantidad DESC
+            """, conn)
+            
+            if not elementos_categoria.empty:
+                fig = px.pie(elementos_categoria, values='cantidad', names='nombre')
+                st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.subheader("📊 Estado de Elementos")
+            estado_elementos = pd.read_sql_query("""
+                SELECT estado, COUNT(*) as cantidad
+                FROM elementos
+                GROUP BY estado
+            """, conn)
+            
+            if not estado_elementos.empty:
+                fig = px.bar(estado_elementos, x='estado', y='cantidad')
+                st.plotly_chart(fig, use_container_width=True)
+    
+    # Alertas de vencimiento
     st.subheader("🚨 Alertas de Vencimiento")
     prestamos_vencer = pd.read_sql_query("""
         SELECT e.codigo, e.nombre as elemento, b.nombre as beneficiario,
-               p.fecha_devolucion_estimada
+               h.nombre as hermano_solicitante, l.nombre as logia,
+               p.fecha_prestamo, p.fecha_devolucion_estimada,
+               CASE 
+                   WHEN DATE('now') > p.fecha_devolucion_estimada THEN 'VENCIDO'
+                   WHEN DATE(p.fecha_devolucion_estimada, '-7 days') <= DATE('now') THEN 'POR VENCER'
+                   ELSE 'VIGENTE'
+               END as estado_alerta
         FROM prestamos p
         JOIN elementos e ON p.elemento_id = e.id
         JOIN beneficiarios b ON p.beneficiario_id = b.id
+        JOIN hermanos h ON p.hermano_solicitante_id = h.id
+        LEFT JOIN logias l ON h.logia_id = l.id
         WHERE p.estado = 'activo' 
-        AND p.fecha_devolucion_estimada <= DATE('now', '+7 days')
-        ORDER BY p.fecha_devolucion_estimada
+        AND (DATE('now') > p.fecha_devolucion_estimada 
+             OR DATE(p.fecha_devolucion_estimada, '-7 days') <= DATE('now'))
+        ORDER BY p.fecha_devolucion_estimada ASC
     """, conn)
     
     if not prestamos_vencer.empty:
         st.dataframe(prestamos_vencer, use_container_width=True)
+        st.info("💡 **Tip:** Ve a 'Formulario de Préstamo' → 'DEVOLUCIÓN SIMPLE' para gestionar devoluciones")
     else:
-        st.success("✅ No hay préstamos próximos a vencer")
+        st.success("✅ No hay préstamos próximos a vencer en los próximos 7 días")
     
     conn.close()
 
