@@ -1,0 +1,39 @@
+# Configuración para BEO - Banco de Elementos Ortopédicos
+# Este archivo personaliza la apariencia de tu app Streamlit
+
+[theme]
+# 🎨 COLORES PERSONALIZADOS (inspirados en masonería)
+primaryColor = "#1f4e79"              # Azul masónico para botones y enlaces
+backgroundColor = "#ffffff"            # Fondo blanco principal
+secondaryBackgroundColor = "#f8f9fa"   # Fondo gris claro para sidebars
+textColor = "#262730"                  # Color del texto principal
+
+# 🎨 ALTERNATIVAS DE COLORES (descomenta la que prefieras):
+# primaryColor = "#B8860B"             # Dorado masónico
+# primaryColor = "#4CAF50"             # Verde institucional
+# primaryColor = "#FF6B6B"             # Rojo elegante
+
+[server]
+# 🔧 CONFIGURACIONES DEL SERVIDOR
+maxUploadSize = 10                     # Máximo 10MB para archivos subidos
+enableCORS = false                     # Configuración de seguridad
+enableXsrfProtection = true            # Protección contra ataques
+
+[browser]
+# 📊 PRIVACIDAD Y ESTADÍSTICAS
+gatherUsageStats = false               # No enviar estadísticas de uso a Streamlit
+
+[client]
+# 🐛 CONFIGURACIÓN DE ERRORES
+showErrorDetails = false               # Ocultar detalles técnicos de errores en producción
+# En desarrollo, cambiar a true para ver errores completos
+
+[global]
+# ⚙️ CONFIGURACIONES GENERALES
+developmentMode = false                # Modo producción (menos logs)
+logLevel = "info"                     # Nivel de logs: debug, info, warning, error
+
+# 📱 Para apps móviles
+[theme.base]
+# Puedes usar "light" o "dark" como base
+# base = "dark"  # Descomenta para tema oscuro
