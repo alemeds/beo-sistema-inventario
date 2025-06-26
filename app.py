@@ -1,4 +1,167 @@
-import streamlit as st
+with tab4:
+        st.header("📚 Historial de Devoluciones")
+        st.markdown("**Registro completo de todas las devoluciones realizadas**")
+        
+        conn = db.get_connection()
+        
+        # Obtener historial de devoluciones
+        historial_devoluciones = pd.read_sql_query("""
+            SELECT p.id, p.fecha_prestamo, p.fecha_devolucion_estimada, p.fecha_devolucion_real,
+                   p.duracion_dias,
+                   e.codigo, e.nombre as elemento,
+                   c.nombre as categoria,
+                   d.nombre as deposito_actual,
+                   b.nombre as beneficiario, b.tipo,
+                   h.nombre as hermano_solicitante,
+                   l.nombre as logia,
+                   p.entregado_por, p.recibido_por,
+                   p.observaciones_prestamo, p.observaciones_devolucion,
+                   CAST((JULIANDAY(p.fecha_devolucion_real) - JULIANDAY(p.fecha_devolucion_estimada)) AS INTEGER) as dias_diferencia
+            FROM prestamos p
+            JOIN elementos e ON p.elemento_id = e.id
+            JOIN categorias c ON e.categoria_id = c.id
+            JOIN depositos d ON e.deposito_id = d.id
+            JOIN beneficiarios b ON p.beneficiario_id = b.id
+            JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            LEFT JOIN logias l ON h.logia_id = l.id
+            WHERE p.estado = 'devuelto'
+            ORDER BY p.fecha_devolucion_real DESC
+        """, conn)
+        
+        if not historial_devoluciones.empty:
+            # Filtros para el historial
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                fecha_desde = st.date_input(
+                    "Desde:",
+                    value=date.today() - timedelta(days=90),
+                    help="Filtrar devoluciones desde esta fecha"
+                )
+            
+            with col2:
+                fecha_hasta = st.date_input(
+                    "Hasta:",
+                    value=date.today(),
+                    help="Filtrar devoluciones hasta esta fecha"
+                )
+            
+            with col3:
+                filtro_cumplimiento = st.selectbox(
+                    "Cumplimiento:",
+                    options=["Todos", "A Tiempo", "Con Retraso", "Anticipadas"],
+                    help="Filtrar según cumplimiento de fechas"
+                )
+            
+            # Aplicar filtros
+            historial_filtrado = historial_devoluciones[
+                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) >= pd.to_datetime(fecha_desde)) &
+                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) <= pd.to_datetime(fecha_hasta))
+            ]
+            
+            if filtro_cumplimiento != "Todos":
+                if filtro_cumplimiento == "A Tiempo":
+                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] == 0]
+                elif filtro_cumplimiento == "Con Retraso":
+                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] > 0]
+                elif filtro_cumplimiento == "Anticipadas":
+                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] < 0]
+            
+            if not historial_filtrado.empty:
+                st.markdown(f"#### 📊 Mostrando {len(historial_filtrado)} de {len(historial_devoluciones)} devoluciones")
+                
+                # Estadísticas rápidas
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Total Devoluciones", len(historial_filtrado))
+                
+                with col2:
+                    a_tiempo = len(historial_filtrado[historial_filtrado['dias_diferencia'] == 0])
+                    st.metric("A Tiempo", a_tiempo)
+                
+                with col3:
+                    con_retraso = len(historial_filtrado[historial_filtrado['dias_diferencia'] > 0])
+                    st.metric("Con Retraso", con_retraso)
+                
+                with col4:
+                    anticipadas = len(historial_filtrado[historial_filtrado['dias_diferencia'] < 0])
+                    st.metric("Anticipadas", anticipadas)
+                
+                st.markdown("---")
+                
+                # Mostrar cada devolución
+                for idx, devolucion in historial_filtrado.iterrows():
+                    # Determinar color según cumplimiento
+                    if devolucion['dias_diferencia'] == 0:
+                        cumplimiento_color = "#e8f5e8"  # Verde
+                        cumplimiento_emoji = "✅"
+                        cumplimiento_texto = "A tiempo"
+                    elif devolucion['dias_diferencia'] > 0:
+                        cumplimiento_color = "#ffebee"  # Rojo
+                        cumplimiento_emoji = "⏰"
+                        cumplimiento_texto = f"{devolucion['dias_diferencia']} días de retraso"
+                    else:
+                        cumplimiento_color = "#e3f2fd"  # Azul
+                        cumplimiento_emoji = "⚡"
+                        cumplimiento_texto = f"{abs(devolucion['dias_diferencia'])} días antes"
+                    
+                    with st.expander(f"{cumplimiento_emoji} {devolucion['codigo']} - {devolucion['elemento']} | Devuelto: {devolucion['fecha_devolucion_real']}"):
+                        # Información en columnas
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.markdown(f"""
+                            **📦 ELEMENTO:**  
+                            Código: {devolucion['codigo']}  
+                            Nombre: {devolucion['elemento']}  
+                            Categoría: {devolucion['categoria']}  
+                            Depósito Actual: {devolucion['deposito_actual']}
+                            """)
+                        
+                        with col2:
+                            st.markdown(f"""
+                            **👤 PRÉSTAMO:**  
+                            Beneficiario: {devolucion['beneficiario']} ({devolucion['tipo']})  
+                            Hermano: {devolucion['hermano_solicitante']}  
+                            Logia: {devolucion['logia'] or 'No disponible'}  
+                            Duración: {devolucion['duracion_dias']} días
+                            """)
+                        
+                        with col3:
+                            st.markdown(f"""
+                            **📅 FECHAS:**  
+                            Préstamo: {devolucion['fecha_prestamo']}  
+                            Devolución Prevista: {devolucion['fecha_devolucion_estimada']}  
+                            Devolución Real: {devolucion['fecha_devolucion_real']}  
+                            Cumplimiento: {cumplimiento_texto}
+                            """)
+                        
+                        # Responsables y observaciones
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown(f"""
+                            **👥 RESPONSABLES:**  
+                            Entregado por: {devolucion['entregado_por']}  
+                            Recibido por: {devolucion['recibido_por']}
+                            """)
+                        
+                        with col2:
+                            if devolucion['observaciones_prestamo'] or devolucion['observaciones_devolucion']:
+                                st.markdown("**📝 OBSERVACIONES:**")
+                                if devolucion['observaciones_prestamo']:
+                                    st.text(f"Préstamo: {devolucion['observaciones_prestamo']}")
+                                if devolucion['observaciones_devolucion']:
+                                    st.text(f"Devolución: {devolucion['observaciones_devolucion']}")
+            else:
+                st.warning("❌ No se encontraron devoluciones en el rango de fechas seleccionado")
+        
+        else:
+            st.info("ℹ️ **No hay devoluciones registradas aún**")
+            st.markdown("Las devoluciones aparecerán aquí una vez que se registren en la pestaña **'DEVOLVER ELEMENTOS'**")
+        
+        conn.close()import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, date, timedelta
@@ -162,11 +325,18 @@ class DatabaseManager:
             cursor.execute("INSERT OR IGNORE INTO categorias (nombre, descripcion) VALUES (?, ?)", 
                          (categoria, descripcion))
         
+        # Insertar grados masónicos básicos
+        grados_masonicos = ["Apr:.", "Comp:.", "M:.M:.", "Gr:. 4°", "Gr:. 18°", "Gr:. 30°", "Gr:. 32°", "Gr:. 33°"]
+        
         conn.commit()
         conn.close()
 
 # Inicializar la base de datos
 db = DatabaseManager()
+
+def hash_password(password: str) -> str:
+    """Hash de contraseña simple para autenticación básica"""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 def authenticate():
     """Sistema de autenticación básico"""
@@ -262,6 +432,8 @@ def gestionar_hermanos():
     tab1, tab2 = st.tabs(["Nuevo Hermano", "Lista de Hermanos"])
     
     with tab1:
+        col1, col2 = st.columns(2)
+        
         # Obtener logias
         conn = db.get_connection()
         logias_df = pd.read_sql_query("SELECT id, nombre, numero FROM logias ORDER BY numero, nombre", conn)
@@ -340,9 +512,11 @@ def gestionar_elementos():
     """Gestión de elementos ortopédicos"""
     st.header("🦽 Gestión de Elementos Ortopédicos")
     
-    tab1, tab2 = st.tabs(["Nuevo Elemento", "Inventario"])
+    tab1, tab2, tab3 = st.tabs(["Nuevo Elemento", "Inventario", "🔧 Cambiar Estado de Elementos"])
     
     with tab1:
+        col1, col2 = st.columns(2)
+        
         # Obtener depósitos y categorías
         conn = db.get_connection()
         depositos_df = pd.read_sql_query("SELECT id, nombre FROM depositos", conn)
@@ -486,6 +660,350 @@ def gestionar_elementos():
                 st.metric("En Mantenimiento", mantenimiento)
         else:
             st.info("No se encontraron elementos con los filtros aplicados")
+    
+    with tab3:
+        st.header("🔧 Cambiar Estado de Elementos")
+        st.markdown("**Gestión manual de estados para casos especiales, correcciones o mantenimiento**")
+        
+        conn = db.get_connection()
+        
+        # Obtener todos los elementos con información detallada
+        elementos_completos = pd.read_sql_query("""
+            SELECT e.id, e.codigo, e.nombre, c.nombre as categoria, d.nombre as deposito, 
+                   e.estado, e.marca, e.modelo, e.fecha_ingreso, e.observaciones,
+                   p.id as prestamo_id, p.fecha_prestamo, p.fecha_devolucion_estimada,
+                   b.nombre as beneficiario_actual,
+                   h.nombre as hermano_solicitante
+            FROM elementos e
+            JOIN categorias c ON e.categoria_id = c.id
+            JOIN depositos d ON e.deposito_id = d.id
+            LEFT JOIN prestamos p ON e.id = p.elemento_id AND p.estado = 'activo'
+            LEFT JOIN beneficiarios b ON p.beneficiario_id = b.id
+            LEFT JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            ORDER BY e.codigo
+        """, conn)
+        
+        if not elementos_completos.empty:
+            # Filtros
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                filtro_estado_actual = st.selectbox(
+                    "Filtrar por Estado Actual:",
+                    options=["Todos", "disponible", "prestado", "mantenimiento"],
+                    help="Filtrar elementos según su estado actual"
+                )
+            
+            with col2:
+                busqueda_codigo = st.text_input(
+                    "Buscar por Código:",
+                    placeholder="Ej: SR-001",
+                    help="Buscar elemento por su código"
+                )
+            
+            with col3:
+                busqueda_nombre = st.text_input(
+                    "Buscar por Nombre:",
+                    placeholder="Ej: Silla de ruedas",
+                    help="Buscar elemento por su nombre"
+                )
+            
+            # Aplicar filtros
+            elementos_filtrados = elementos_completos.copy()
+            
+            if filtro_estado_actual != "Todos":
+                elementos_filtrados = elementos_filtrados[elementos_filtrados['estado'] == filtro_estado_actual]
+            
+            if busqueda_codigo:
+                elementos_filtrados = elementos_filtrados[
+                    elementos_filtrados['codigo'].str.contains(busqueda_codigo, case=False, na=False)
+                ]
+            
+            if busqueda_nombre:
+                elementos_filtrados = elementos_filtrados[
+                    elementos_filtrados['nombre'].str.contains(busqueda_nombre, case=False, na=False)
+                ]
+            
+            if not elementos_filtrados.empty:
+                st.markdown(f"#### 🔍 Mostrando {len(elementos_filtrados)} de {len(elementos_completos)} elementos")
+                
+                # Mostrar cada elemento con opción de cambio de estado
+                for idx, elemento in elementos_filtrados.iterrows():
+                    # Determinar color según estado actual
+                    if elemento['estado'] == 'disponible':
+                        estado_color = "#e8f5e8"  # Verde
+                        estado_emoji = "✅"
+                    elif elemento['estado'] == 'prestado':
+                        estado_color = "#fff3e0"  # Naranja
+                        estado_emoji = "📋"
+                    elif elemento['estado'] == 'mantenimiento':
+                        estado_color = "#ffebee"  # Rojo
+                        estado_emoji = "🔧"
+                    else:
+                        estado_color = "#f5f5f5"  # Gris
+                        estado_emoji = "❓"
+                    
+                    # Tarjeta del elemento
+                    with st.container():
+                        st.markdown(f"""
+                        <div style="background-color: {estado_color}; padding: 15px; border-radius: 10px; margin: 10px 0;">
+                        <h4>{estado_emoji} {elemento['codigo']} - {elemento['nombre']}</h4>
+                        </div>
+                        """, unsafe_allow_html=True)
+                        
+                        # Información del elemento
+                        col1, col2, col3, col4 = st.columns(4)
+                        
+                        with col1:
+                            st.markdown(f"""
+                            **📦 ELEMENTO:**  
+                            Código: {elemento['codigo']}  
+                            Nombre: {elemento['nombre']}  
+                            Categoría: {elemento['categoria']}  
+                            Estado Actual: **{elemento['estado'].upper()}**
+                            """)
+                        
+                        with col2:
+                            st.markdown(f"""
+                            **📍 UBICACIÓN:**  
+                            Depósito: {elemento['deposito']}  
+                            Marca: {elemento['marca'] or 'N/A'}  
+                            Modelo: {elemento['modelo'] or 'N/A'}  
+                            Ingreso: {elemento['fecha_ingreso']}
+                            """)
+                        
+                        with col3:
+                            if elemento['estado'] == 'prestado' and elemento['prestamo_id']:
+                                st.markdown(f"""
+                                **📋 PRÉSTAMO ACTIVO:**  
+                                Beneficiario: {elemento['beneficiario_actual']}  
+                                Hermano: {elemento['hermano_solicitante']}  
+                                Desde: {elemento['fecha_prestamo']}  
+                                Hasta: {elemento['fecha_devolucion_estimada']}
+                                """)
+                            else:
+                                st.markdown(f"""
+                                **📝 INFORMACIÓN:**  
+                                Sin préstamo activo  
+                                Disponible para cambios  
+                                """)
+                                if elemento['observaciones']:
+                                    st.text(f"Obs: {elemento['observaciones'][:50]}...")
+                        
+                        with col4:
+                            # Botón para cambiar estado
+                            if st.button(
+                                f"🔄 Cambiar Estado", 
+                                key=f"cambiar_estado_{elemento['id']}", 
+                                help=f"Cambiar estado del elemento {elemento['codigo']}"
+                            ):
+                                st.session_state[f'mostrar_cambio_estado_{elemento["id"]}'] = True
+                        
+                        # Formulario para cambiar estado
+                        if st.session_state.get(f'mostrar_cambio_estado_{elemento["id"]}', False):
+                            st.markdown("---")
+                            st.markdown(f"### 🔄 Cambiar Estado: {elemento['codigo']} - {elemento['nombre']}")
+                            
+                            # Advertencia si está prestado
+                            if elemento['estado'] == 'prestado' and elemento['prestamo_id']:
+                                st.warning(f"""
+                                ⚠️ **ATENCIÓN:** Este elemento está actualmente prestado a {elemento['beneficiario_actual']}.
+                                
+                                **Antes de cambiar el estado, considera:**
+                                - ¿El elemento fue devuelto pero no se registró la devolución?
+                                - ¿Necesitas registrar la devolución oficial primero?
+                                - ¿Es realmente necesario cambiar el estado manualmente?
+                                
+                                **Recomendación:** Usa la pestaña "🔄 DEVOLVER ELEMENTOS" para devoluciones normales.
+                                """)
+                            
+                            with st.form(f"form_cambio_estado_{elemento['id']}"):
+                                col_form1, col_form2 = st.columns(2)
+                                
+                                with col_form1:
+                                    st.markdown("#### 📊 Nuevo Estado")
+                                    
+                                    # Estados disponibles
+                                    estados_disponibles = ["disponible", "prestado", "mantenimiento"]
+                                    estado_actual_idx = estados_disponibles.index(elemento['estado']) if elemento['estado'] in estados_disponibles else 0
+                                    
+                                    nuevo_estado = st.selectbox(
+                                        "Seleccionar Nuevo Estado:",
+                                        options=estados_disponibles,
+                                        index=estado_actual_idx,
+                                        format_func=lambda x: {
+                                            'disponible': '✅ Disponible',
+                                            'prestado': '📋 Prestado', 
+                                            'mantenimiento': '🔧 En Mantenimiento'
+                                        }[x],
+                                        help="Selecciona el nuevo estado del elemento"
+                                    )
+                                    
+                                    # Explicación del estado seleccionado
+                                    if nuevo_estado == 'disponible':
+                                        st.info("✅ **Disponible:** El elemento puede ser prestado")
+                                    elif nuevo_estado == 'prestado':
+                                        st.warning("📋 **Prestado:** Marca el elemento como prestado (sin crear préstamo formal)")
+                                    elif nuevo_estado == 'mantenimiento':
+                                        st.error("🔧 **Mantenimiento:** El elemento necesita reparación o revisión")
+                                
+                                with col_form2:
+                                    st.markdown("#### 📝 Información del Cambio")
+                                    
+                                    razon_cambio = st.selectbox(
+                                        "Razón del Cambio:",
+                                        options=[
+                                            "Corrección administrativa",
+                                            "Devolución no registrada",
+                                            "Elemento perdido/dañado",
+                                            "Mantenimiento preventivo",
+                                            "Error en registro anterior",
+                                            "Otro"
+                                        ],
+                                        help="Selecciona la razón principal del cambio"
+                                    )
+                                    
+                                    if razon_cambio == "Otro":
+                                        razon_cambio = st.text_input("Especificar razón:")
+                                    
+                                    observaciones_cambio = st.text_area(
+                                        "Observaciones del Cambio:",
+                                        placeholder="Describe el motivo detallado del cambio de estado...",
+                                        help="Información adicional sobre por qué se cambia el estado"
+                                    )
+                                    
+                                    responsable_cambio = st.text_input(
+                                        "Responsable del Cambio:*",
+                                        placeholder="Nombre de quien autoriza el cambio",
+                                        help="Persona responsable que autoriza este cambio"
+                                    )
+                                
+                                # Mostrar cambio propuesto
+                                st.markdown("#### 📋 Resumen del Cambio")
+                                col_resumen1, col_resumen2, col_resumen3 = st.columns(3)
+                                with col_resumen1:
+                                    st.markdown(f"**Estado Actual:** {elemento['estado'].upper()}")
+                                with col_resumen2:
+                                    st.markdown(f"**Nuevo Estado:** {nuevo_estado.upper()}")
+                                with col_resumen3:
+                                    st.markdown(f"**Razón:** {razon_cambio}")
+                                
+                                # Botones de acción
+                                col_btn1, col_btn2, col_btn3 = st.columns(3)
+                                
+                                with col_btn1:
+                                    submitted = st.form_submit_button(
+                                        "✅ CONFIRMAR CAMBIO",
+                                        type="primary",
+                                        use_container_width=True
+                                    )
+                                
+                                with col_btn2:
+                                    if st.form_submit_button(
+                                        "❌ Cancelar",
+                                        use_container_width=True
+                                    ):
+                                        del st.session_state[f'mostrar_cambio_estado_{elemento["id"]}']
+                                        st.rerun()
+                                
+                                with col_btn3:
+                                    # Acción especial si está prestado
+                                    if elemento['estado'] == 'prestado' and elemento['prestamo_id']:
+                                        if st.form_submit_button(
+                                            "📋 Ver Préstamo",
+                                            use_container_width=True,
+                                            help="Ir a la gestión de préstamos para ver detalles"
+                                        ):
+                                            st.info("💡 Para gestionar este préstamo, ve a 'Formulario de Préstamo' → 'Préstamos Activos'")
+                                
+                                # Procesar el cambio
+                                if submitted:
+                                    if responsable_cambio:
+                                        try:
+                                            cursor = conn.cursor()
+                                            
+                                            # Validaciones especiales
+                                            cambio_valido = True
+                                            mensaje_error = ""
+                                            
+                                            # Si cambia a 'prestado' manualmente, verificar que no haya préstamo activo
+                                            if nuevo_estado == 'prestado' and elemento['estado'] != 'prestado':
+                                                if elemento['prestamo_id']:
+                                                    cambio_valido = False
+                                                    mensaje_error = "No se puede marcar como prestado: ya tiene un préstamo activo registrado"
+                                            
+                                            # Si cambia desde 'prestado', considerar cerrar préstamo
+                                            if elemento['estado'] == 'prestado' and nuevo_estado != 'prestado' and elemento['prestamo_id']:
+                                                st.warning("⚠️ **ATENCIÓN:** Cambiar el estado cerrará automáticamente el préstamo activo. ¿Estás seguro?")
+                                                # Aquí podrías agregar confirmación adicional
+                                            
+                                            if cambio_valido:
+                                                # Actualizar estado del elemento
+                                                cursor.execute("""
+                                                    UPDATE elementos 
+                                                    SET estado = ?,
+                                                        observaciones = COALESCE(observaciones, '') || 
+                                                        CASE WHEN observaciones IS NULL OR observaciones = '' 
+                                                             THEN ? 
+                                                             ELSE '\n' || ? 
+                                                        END
+                                                    WHERE id = ?
+                                                """, (
+                                                    nuevo_estado,
+                                                    f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] Estado cambiado de '{elemento['estado']}' a '{nuevo_estado}' por {responsable_cambio}. Razón: {razon_cambio}. {observaciones_cambio}",
+                                                    f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] Estado cambiado de '{elemento['estado']}' a '{nuevo_estado}' por {responsable_cambio}. Razón: {razon_cambio}. {observaciones_cambio}",
+                                                    elemento['id']
+                                                ))
+                                                
+                                                # Si había préstamo activo y se cambia el estado, cerrar préstamo
+                                                if elemento['estado'] == 'prestado' and nuevo_estado != 'prestado' and elemento['prestamo_id']:
+                                                    cursor.execute("""
+                                                        UPDATE prestamos 
+                                                        SET estado = 'devuelto', 
+                                                            fecha_devolucion_real = DATE('now'),
+                                                            observaciones_devolucion = ?,
+                                                            recibido_por = ?
+                                                        WHERE id = ?
+                                                    """, (
+                                                        f"Préstamo cerrado automáticamente por cambio de estado manual. {observaciones_cambio}",
+                                                        responsable_cambio,
+                                                        elemento['prestamo_id']
+                                                    ))
+                                                
+                                                conn.commit()
+                                                
+                                                # Mensaje de éxito
+                                                st.success(f"""
+                                                ✅ **Estado Cambiado Exitosamente**
+                                                
+                                                📦 **Elemento:** {elemento['codigo']} - {elemento['nombre']}  
+                                                📊 **Estado:** {elemento['estado']} → **{nuevo_estado}**  
+                                                👤 **Responsable:** {responsable_cambio}  
+                                                📅 **Fecha:** {datetime.now().strftime('%d/%m/%Y %H:%M')}  
+                                                📝 **Razón:** {razon_cambio}
+                                                """)
+                                                
+                                                # Limpiar estado y recargar
+                                                del st.session_state[f'mostrar_cambio_estado_{elemento["id"]}']
+                                                time.sleep(2)
+                                                st.rerun()
+                                            else:
+                                                st.error(f"❌ {mensaje_error}")
+                                                
+                                        except Exception as e:
+                                            st.error(f"❌ Error al cambiar estado: {e}")
+                                    else:
+                                        st.error("❌ El campo 'Responsable del Cambio' es obligatorio")
+                        
+                        st.markdown("---")
+            else:
+                st.warning("❌ No se encontraron elementos que coincidan con los filtros aplicados.")
+        
+        else:
+            st.info("ℹ️ **No hay elementos registrados en el sistema**")
+            st.markdown("Para agregar elementos, ve a la pestaña **'Nuevo Elemento'**")
+        
+        conn.close()
 
 def gestionar_prestamos():
     """Gestión de préstamos según formulario BEO"""
@@ -634,6 +1152,7 @@ def gestionar_prestamos():
                 conn.close()
                 
                 # Fecha estimada de devolución - CORREGIDA
+                from datetime import timedelta
                 fecha_devolucion_estimada = fecha_prestamo + timedelta(days=duracion_dias)
                 st.markdown("#### 📅 Fecha Estimada de Devolución")
                 st.date_input(
@@ -770,7 +1289,7 @@ def gestionar_prestamos():
             st.markdown("Para registrar un nuevo préstamo, ir a la pestaña **'Nuevo Préstamo'**")
         
         conn.close()
-
+    
     with tab3:
         st.header("🔄 DEVOLVER ELEMENTOS")
         st.markdown("**En esta sección puedes devolver cualquier elemento prestado, sin importar si está vencido o no.**")
@@ -950,18 +1469,11 @@ def gestionar_prestamos():
                                     
                                     # SELECCIÓN DE DEPÓSITO - NUEVA FUNCIONALIDAD
                                     if not depositos_disponibles.empty:
-                                        # Buscar el índice del depósito original
-                                        deposito_original_index = 0
-                                        for i, dep_id in enumerate(depositos_disponibles['id']):
-                                            if dep_id == prestamo['elemento_id']:  # Esto puede no ser correcto, necesito arreglarlo
-                                                deposito_original_index = i
-                                                break
-                                        
                                         deposito_devolucion_id = st.selectbox(
                                             "Depósito de Devolución*",
                                             options=depositos_disponibles['id'].tolist(),
                                             format_func=lambda x: f"{depositos_disponibles[depositos_disponibles['id'] == x]['nombre'].iloc[0]}",
-                                            index=0,  # Por defecto el primer depósito
+                                            index=depositos_disponibles[depositos_disponibles['id'] == prestamo['elemento_id']].index[0] if len(depositos_disponibles[depositos_disponibles['id'] == prestamo['elemento_id']]) > 0 else 0,
                                             help="Selecciona a qué depósito se devuelve el elemento"
                                         )
                                         
@@ -1092,171 +1604,6 @@ def gestionar_prestamos():
         else:
             st.info("ℹ️ **No hay elementos prestados actualmente**")
             st.markdown("Para registrar un nuevo préstamo, ve a la pestaña **'Nuevo Préstamo'**")
-        
-        conn.close()
-    
-    with tab4:
-        st.header("📚 Historial de Devoluciones")
-        st.markdown("**Registro completo de todas las devoluciones realizadas**")
-        
-        conn = db.get_connection()
-        
-        # Obtener historial de devoluciones
-        historial_devoluciones = pd.read_sql_query("""
-            SELECT p.id, p.fecha_prestamo, p.fecha_devolucion_estimada, p.fecha_devolucion_real,
-                   p.duracion_dias,
-                   e.codigo, e.nombre as elemento,
-                   c.nombre as categoria,
-                   d.nombre as deposito_actual,
-                   b.nombre as beneficiario, b.tipo,
-                   h.nombre as hermano_solicitante,
-                   l.nombre as logia,
-                   p.entregado_por, p.recibido_por,
-                   p.observaciones_prestamo, p.observaciones_devolucion,
-                   CAST((JULIANDAY(p.fecha_devolucion_real) - JULIANDAY(p.fecha_devolucion_estimada)) AS INTEGER) as dias_diferencia
-            FROM prestamos p
-            JOIN elementos e ON p.elemento_id = e.id
-            JOIN categorias c ON e.categoria_id = c.id
-            JOIN depositos d ON e.deposito_id = d.id
-            JOIN beneficiarios b ON p.beneficiario_id = b.id
-            JOIN hermanos h ON p.hermano_solicitante_id = h.id
-            LEFT JOIN logias l ON h.logia_id = l.id
-            WHERE p.estado = 'devuelto'
-            ORDER BY p.fecha_devolucion_real DESC
-        """, conn)
-        
-        if not historial_devoluciones.empty:
-            # Filtros para el historial
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                fecha_desde = st.date_input(
-                    "Desde:",
-                    value=date.today() - timedelta(days=90),
-                    help="Filtrar devoluciones desde esta fecha"
-                )
-            
-            with col2:
-                fecha_hasta = st.date_input(
-                    "Hasta:",
-                    value=date.today(),
-                    help="Filtrar devoluciones hasta esta fecha"
-                )
-            
-            with col3:
-                filtro_cumplimiento = st.selectbox(
-                    "Cumplimiento:",
-                    options=["Todos", "A Tiempo", "Con Retraso", "Anticipadas"],
-                    help="Filtrar según cumplimiento de fechas"
-                )
-            
-            # Aplicar filtros
-            historial_filtrado = historial_devoluciones[
-                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) >= pd.to_datetime(fecha_desde)) &
-                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) <= pd.to_datetime(fecha_hasta))
-            ]
-            
-            if filtro_cumplimiento != "Todos":
-                if filtro_cumplimiento == "A Tiempo":
-                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] == 0]
-                elif filtro_cumplimiento == "Con Retraso":
-                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] > 0]
-                elif filtro_cumplimiento == "Anticipadas":
-                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] < 0]
-            
-            if not historial_filtrado.empty:
-                st.markdown(f"#### 📊 Mostrando {len(historial_filtrado)} de {len(historial_devoluciones)} devoluciones")
-                
-                # Estadísticas rápidas
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Total Devoluciones", len(historial_filtrado))
-                
-                with col2:
-                    a_tiempo = len(historial_filtrado[historial_filtrado['dias_diferencia'] == 0])
-                    st.metric("A Tiempo", a_tiempo)
-                
-                with col3:
-                    con_retraso = len(historial_filtrado[historial_filtrado['dias_diferencia'] > 0])
-                    st.metric("Con Retraso", con_retraso)
-                
-                with col4:
-                    anticipadas = len(historial_filtrado[historial_filtrado['dias_diferencia'] < 0])
-                    st.metric("Anticipadas", anticipadas)
-                
-                st.markdown("---")
-                
-                # Mostrar cada devolución
-                for idx, devolucion in historial_filtrado.iterrows():
-                    # Determinar color según cumplimiento
-                    if devolucion['dias_diferencia'] == 0:
-                        cumplimiento_color = "#e8f5e8"  # Verde
-                        cumplimiento_emoji = "✅"
-                        cumplimiento_texto = "A tiempo"
-                    elif devolucion['dias_diferencia'] > 0:
-                        cumplimiento_color = "#ffebee"  # Rojo
-                        cumplimiento_emoji = "⏰"
-                        cumplimiento_texto = f"{devolucion['dias_diferencia']} días de retraso"
-                    else:
-                        cumplimiento_color = "#e3f2fd"  # Azul
-                        cumplimiento_emoji = "⚡"
-                        cumplimiento_texto = f"{abs(devolucion['dias_diferencia'])} días antes"
-                    
-                    with st.expander(f"{cumplimiento_emoji} {devolucion['codigo']} - {devolucion['elemento']} | Devuelto: {devolucion['fecha_devolucion_real']}"):
-                        # Información en columnas
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.markdown(f"""
-                            **📦 ELEMENTO:**  
-                            Código: {devolucion['codigo']}  
-                            Nombre: {devolucion['elemento']}  
-                            Categoría: {devolucion['categoria']}  
-                            Depósito Actual: {devolucion['deposito_actual']}
-                            """)
-                        
-                        with col2:
-                            st.markdown(f"""
-                            **👤 PRÉSTAMO:**  
-                            Beneficiario: {devolucion['beneficiario']} ({devolucion['tipo']})  
-                            Hermano: {devolucion['hermano_solicitante']}  
-                            Logia: {devolucion['logia'] or 'No disponible'}  
-                            Duración: {devolucion['duracion_dias']} días
-                            """)
-                        
-                        with col3:
-                            st.markdown(f"""
-                            **📅 FECHAS:**  
-                            Préstamo: {devolucion['fecha_prestamo']}  
-                            Devolución Prevista: {devolucion['fecha_devolucion_estimada']}  
-                            Devolución Real: {devolucion['fecha_devolucion_real']}  
-                            Cumplimiento: {cumplimiento_texto}
-                            """)
-                        
-                        # Responsables y observaciones
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.markdown(f"""
-                            **👥 RESPONSABLES:**  
-                            Entregado por: {devolucion['entregado_por']}  
-                            Recibido por: {devolucion['recibido_por']}
-                            """)
-                        
-                        with col2:
-                            if devolucion['observaciones_prestamo'] or devolucion['observaciones_devolucion']:
-                                st.markdown("**📝 OBSERVACIONES:**")
-                                if devolucion['observaciones_prestamo']:
-                                    st.text(f"Préstamo: {devolucion['observaciones_prestamo']}")
-                                if devolucion['observaciones_devolucion']:
-                                    st.text(f"Devolución: {devolucion['observaciones_devolucion']}")
-            else:
-                st.warning("❌ No se encontraron devoluciones en el rango de fechas seleccionado")
-        
-        else:
-            st.info("ℹ️ **No hay devoluciones registradas aún**")
-            st.markdown("Las devoluciones aparecerán aquí una vez que se registren en la pestaña **'DEVOLVER ELEMENTOS'**")
         
         conn.close()
 
