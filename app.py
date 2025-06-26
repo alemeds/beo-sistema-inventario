@@ -353,14 +353,17 @@ def gestionar_elementos():
     with tab1:
         col1, col2 = st.columns(2)
         
-        with col1:
-            # Obtener depósitos y categorías
-            conn = db.get_connection()
-            depositos_df = pd.read_sql_query("SELECT id, nombre FROM depositos", conn)
-            categorias_df = pd.read_sql_query("SELECT id, nombre FROM categorias", conn)
-            conn.close()
+        # Obtener depósitos y categorías
+        conn = db.get_connection()
+        depositos_df = pd.read_sql_query("SELECT id, nombre FROM depositos", conn)
+        categorias_df = pd.read_sql_query("SELECT id, nombre FROM categorias", conn)
+        conn.close()
+        
+        # FORMULARIO UNIFICADO - SOLUCIONA EL ERROR
+        with st.form("elemento_form_completo"):
+            col1, col2 = st.columns(2)
             
-            with st.form("elemento_form"):
+            with col1:
                 codigo = st.text_input("Código del Elemento*")
                 nombre = st.text_input("Nombre del Elemento*")
                 
@@ -383,36 +386,38 @@ def gestionar_elementos():
                 else:
                     st.error("No hay depósitos disponibles")
                     deposito_id = None
-        
-        with col2:
-            with st.form("elemento_form_cont", clear_on_submit=False):
+            
+            with col2:
                 descripcion = st.text_area("Descripción")
                 marca = st.text_input("Marca")
                 modelo = st.text_input("Modelo")
                 numero_serie = st.text_input("Número de Serie")
                 fecha_ingreso = st.date_input("Fecha de Ingreso", value=date.today())
                 observaciones = st.text_area("Observaciones")
-                
-                if st.form_submit_button("Guardar Elemento"):
-                    if codigo and nombre and categoria_id and deposito_id:
-                        try:
-                            conn = db.get_connection()
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                INSERT INTO elementos 
-                                (codigo, nombre, categoria_id, deposito_id, descripcion, marca, 
-                                 modelo, numero_serie, fecha_ingreso, observaciones)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (codigo, nombre, categoria_id, deposito_id, descripcion, 
-                                 marca, modelo, numero_serie, fecha_ingreso, observaciones))
-                            conn.commit()
-                            conn.close()
-                            st.success("Elemento guardado exitosamente")
-                            st.rerun()
-                        except sqlite3.IntegrityError:
-                            st.error("Ya existe un elemento con ese código")
-                    else:
-                        st.error("Todos los campos marcados con * son obligatorios")
+            
+            # BOTÓN DE ENVÍO - ESTO FALTABA
+            submitted = st.form_submit_button("🦽 Guardar Elemento", use_container_width=True)
+            
+            if submitted:
+                if codigo and nombre and categoria_id and deposito_id:
+                    try:
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO elementos 
+                            (codigo, nombre, categoria_id, deposito_id, descripcion, marca, 
+                             modelo, numero_serie, fecha_ingreso, observaciones)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (codigo, nombre, categoria_id, deposito_id, descripcion, 
+                             marca, modelo, numero_serie, fecha_ingreso, observaciones))
+                        conn.commit()
+                        conn.close()
+                        st.success("✅ Elemento guardado exitosamente")
+                        st.rerun()
+                    except sqlite3.IntegrityError:
+                        st.error("❌ Ya existe un elemento con ese código")
+                else:
+                    st.error("❌ Todos los campos marcados con * son obligatorios")
     
     with tab2:
         st.subheader("Inventario de Elementos")
