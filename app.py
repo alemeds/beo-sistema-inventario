@@ -270,13 +270,16 @@ def gestionar_hermanos():
     with tab1:
         col1, col2 = st.columns(2)
         
-        with col1:
-            # Obtener logias
-            conn = db.get_connection()
-            logias_df = pd.read_sql_query("SELECT id, nombre, numero FROM logias ORDER BY numero, nombre", conn)
-            conn.close()
+        # Obtener logias
+        conn = db.get_connection()
+        logias_df = pd.read_sql_query("SELECT id, nombre, numero FROM logias ORDER BY numero, nombre", conn)
+        conn.close()
+        
+        # FORMULARIO UNIFICADO - SOLUCIONA EL ERROR
+        with st.form("hermano_form_completo"):
+            col1, col2 = st.columns(2)
             
-            with st.form("hermano_form"):
+            with col1:
                 nombre = st.text_input("Nombre Completo*")
                 telefono = st.text_input("Teléfono")
                 
@@ -289,9 +292,8 @@ def gestionar_hermanos():
                 else:
                     st.error("No hay logias disponibles")
                     logia_id = None
-        
-        with col2:
-            with st.form("hermano_form_cont", clear_on_submit=False):
+            
+            with col2:
                 grado = st.selectbox(
                     "Grado",
                     options=["Apr:.", "Comp:.", "M:.M:.", "Gr:. 4°", "Gr:. 18°", "Gr:. 30°", "Gr:. 32°", "Gr:. 33°", "Otro"]
@@ -300,26 +302,29 @@ def gestionar_hermanos():
                 email = st.text_input("Email")
                 fecha_iniciacion = st.date_input("Fecha de Iniciación", value=None)
                 observaciones = st.text_area("Observaciones")
-                
-                if st.form_submit_button("Guardar Hermano"):
-                    if nombre and logia_id:
-                        try:
-                            conn = db.get_connection()
-                            cursor = conn.cursor()
-                            cursor.execute("""
-                                INSERT INTO hermanos (nombre, telefono, logia_id, grado, direccion, 
-                                                    email, fecha_iniciacion, observaciones)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                            """, (nombre, telefono, logia_id, grado, direccion, 
-                                 email, fecha_iniciacion, observaciones))
-                            conn.commit()
-                            conn.close()
-                            st.success("Hermano guardado exitosamente")
-                            st.rerun()
-                        except Exception as e:
-                            st.error(f"Error al guardar hermano: {e}")
-                    else:
-                        st.error("Nombre y logia son obligatorios")
+            
+            # BOTÓN DE ENVÍO - ESTO FALTABA
+            submitted = st.form_submit_button("✅ Guardar Hermano", use_container_width=True)
+            
+            if submitted:
+                if nombre and logia_id:
+                    try:
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO hermanos (nombre, telefono, logia_id, grado, direccion, 
+                                                email, fecha_iniciacion, observaciones)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """, (nombre, telefono, logia_id, grado, direccion, 
+                             email, fecha_iniciacion, observaciones))
+                        conn.commit()
+                        conn.close()
+                        st.success("✅ Hermano guardado exitosamente")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar hermano: {e}")
+                else:
+                    st.error("❌ Nombre y logia son obligatorios")
     
     with tab2:
         st.subheader("Lista de Hermanos")
