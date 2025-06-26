@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import sqlite3
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import hashlib
 import os
 from typing import Optional, List, Dict
@@ -520,13 +520,19 @@ def gestionar_prestamos():
                 with col_dur1:
                     duracion_tipo = st.selectbox("Tipo de duración", ["Días", "Meses"])
                 with col_dur2:
-                    duracion_cantidad = st.number_input("Cantidad", min_value=1, value=90 if duracion_tipo == "Días" else 3)
+                    if duracion_tipo == "Días":
+                        duracion_cantidad = st.number_input("Cantidad", min_value=1, value=90, key="duracion_dias")
+                    else:
+                        duracion_cantidad = st.number_input("Cantidad", min_value=1, value=3, key="duracion_meses")
                 
                 # Cálculo de días
                 if duracion_tipo == "Meses":
                     duracion_dias = duracion_cantidad * 30  # Aproximación
                 else:
                     duracion_dias = duracion_cantidad
+                
+                # Mostrar cálculo en tiempo real
+                st.info(f"📅 **Duración del préstamo:** {duracion_dias} días ({duracion_cantidad} {duracion_tipo.lower()})")
                 
                 st.markdown("#### 👨‍🤝‍👨 Hermano que solicita el pedido")
                 
@@ -637,9 +643,16 @@ def gestionar_prestamos():
                 
                 conn.close()
                 
-                # Fecha estimada de devolución
-                fecha_devolucion_estimada = fecha_prestamo + pd.Timedelta(days=duracion_dias)
-                st.date_input("Fecha estimada de devolución", value=fecha_devolucion_estimada, disabled=True)
+                # Fecha estimada de devolución - CORREGIDA
+                from datetime import timedelta
+                fecha_devolucion_estimada = fecha_prestamo + timedelta(days=duracion_dias)
+                st.markdown("#### 📅 Fecha Estimada de Devolución")
+                st.date_input(
+                    "Devolución prevista", 
+                    value=fecha_devolucion_estimada, 
+                    disabled=True,
+                    help=f"Calculada automáticamente: {fecha_prestamo.strftime('%d/%m/%Y')} + {duracion_dias} días = {fecha_devolucion_estimada.strftime('%d/%m/%Y')}"
+                )
                 
                 st.markdown("#### 📝 Observaciones")
                 observaciones_prestamo = st.text_area("Observaciones del préstamo")
@@ -702,15 +715,16 @@ def gestionar_prestamos():
         conn = db.get_connection()
         prestamos_activos = pd.read_sql_query("""
             SELECT p.id, e.codigo, e.nombre as elemento, 
-                   b.nombre as beneficiario, b.tipo,
+                   b.nombre as beneficiario, b.tipo, b.telefono,
                    h.nombre as hermano_solicitante,
                    l.nombre as logia,
-                   p.fecha_prestamo, p.fecha_devolucion_estimada, 
+                   p.fecha_prestamo, p.fecha_devolucion_estimada, p.entregado_por,
                    CASE 
                        WHEN DATE('now') > p.fecha_devolucion_estimada THEN 'VENCIDO'
                        WHEN DATE(p.fecha_devolucion_estimada, '-7 days') <= DATE('now') THEN 'POR VENCER'
                        ELSE 'VIGENTE'
-                   END as estado_vencimiento
+                   END as estado_vencimiento,
+                   CAST((JULIANDAY(p.fecha_devolucion_estimada) - JULIANDAY('now')) AS INTEGER) as dias_restantes
             FROM prestamos p
             JOIN elementos e ON p.elemento_id = e.id
             JOIN beneficiarios b ON p.beneficiario_id = b.id
@@ -719,44 +733,132 @@ def gestionar_prestamos():
             WHERE p.estado = 'activo'
             ORDER BY p.fecha_devolucion_estimada ASC
         """, conn)
-        conn.close()
         
         if not prestamos_activos.empty:
-            # Aplicar colores según estado de vencimiento
-            def highlight_vencimiento(row):
-                if row['estado_vencimiento'] == 'VENCIDO':
-                    return ['background-color: #ffebee'] * len(row)
-                elif row['estado_vencimiento'] == 'POR VENCER':
-                    return ['background-color: #fff3e0'] * len(row)
-                else:
-                    return ['background-color: #e8f5e8'] * len(row)
+            st.markdown("#### 🔍 Lista de Préstamos Activos")
             
-            styled_df = prestamos_activos.style.apply(highlight_vencimiento, axis=1)
-            st.dataframe(styled_df, use_container_width=True)
+            # Mostrar cada préstamo con opción de devolución
+            for idx, prestamo in prestamos_activos.iterrows():
+                # Determinar color del estado
+                if prestamo['estado_vencimiento'] == 'VENCIDO':
+                    estado_color = "🔴"
+                    container_type = "error"
+                elif prestamo['estado_vencimiento'] == 'POR VENCER':
+                    estado_color = "🟡"
+                    container_type = "warning"
+                else:
+                    estado_color = "🟢"
+                    container_type = "info"
+                
+                # Container para cada préstamo
+                with st.container():
+                    col1, col2, col3 = st.columns([3, 2, 1])
+                    
+                    with col1:
+                        st.markdown(f"""
+                        **{estado_color} {prestamo['codigo']} - {prestamo['elemento']}**  
+                        📞 **Beneficiario:** {prestamo['beneficiario']} ({prestamo['tipo']})  
+                        🏛️ **Hermano:** {prestamo['hermano_solicitante']} - {prestamo['logia']}  
+                        📅 **Prestado:** {prestamo['fecha_prestamo']} | **Devolución:** {prestamo['fecha_devolucion_estimada']}
+                        """)
+                    
+                    with col2:
+                        if prestamo['estado_vencimiento'] == 'VENCIDO':
+                            st.error(f"⚠️ VENCIDO hace {abs(prestamo['dias_restantes'])} días")
+                        elif prestamo['estado_vencimiento'] == 'POR VENCER':
+                            st.warning(f"⏰ Vence en {prestamo['dias_restantes']} días")
+                        else:
+                            st.success(f"✅ Vigente ({prestamo['dias_restantes']} días restantes)")
+                    
+                    with col3:
+                        # Botón de devolución directo
+                        if st.button(f"↩️ Devolver", key=f"devolver_{prestamo['id']}", help="Registrar devolución de este elemento"):
+                            st.session_state[f'devolver_prestamo_{prestamo["id"]}'] = True
+                    
+                    # Formulario de devolución emergente
+                    if st.session_state.get(f'devolver_prestamo_{prestamo["id"]}', False):
+                        with st.expander(f"📝 Registrar Devolución - {prestamo['codigo']}", expanded=True):
+                            with st.form(f"devolucion_form_{prestamo['id']}"):
+                                col_dev1, col_dev2 = st.columns(2)
+                                with col_dev1:
+                                    fecha_devolucion_real = st.date_input("Fecha de Devolución", value=date.today())
+                                    recibido_por = st.text_input("Recibido por*", placeholder="Nombre de quien recibe")
+                                with col_dev2:
+                                    observaciones_devolucion = st.text_area("Observaciones de la Devolución", placeholder="Estado del elemento, observaciones...")
+                                
+                                col_btn1, col_btn2 = st.columns(2)
+                                with col_btn1:
+                                    if st.form_submit_button("✅ Confirmar Devolución", type="primary"):
+                                        if recibido_por:
+                                            try:
+                                                cursor = conn.cursor()
+                                                
+                                                # Obtener elemento_id del préstamo
+                                                cursor.execute("SELECT elemento_id FROM prestamos WHERE id = ?", (prestamo['id'],))
+                                                elemento_id = cursor.fetchone()[0]
+                                                
+                                                # Actualizar préstamo
+                                                cursor.execute("""
+                                                    UPDATE prestamos 
+                                                    SET fecha_devolucion_real = ?, estado = 'devuelto',
+                                                        observaciones_devolucion = ?, recibido_por = ?
+                                                    WHERE id = ?
+                                                """, (fecha_devolucion_real, observaciones_devolucion, recibido_por, prestamo['id']))
+                                                
+                                                # Actualizar estado del elemento
+                                                cursor.execute("UPDATE elementos SET estado = 'disponible' WHERE id = ?", (elemento_id,))
+                                                
+                                                conn.commit()
+                                                st.success(f"✅ Devolución de {prestamo['codigo']} registrada exitosamente")
+                                                del st.session_state[f'devolver_prestamo_{prestamo["id"]}']
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"❌ Error al registrar devolución: {e}")
+                                        else:
+                                            st.error("❌ El campo 'Recibido por' es obligatorio")
+                                
+                                with col_btn2:
+                                    if st.form_submit_button("❌ Cancelar"):
+                                        del st.session_state[f'devolver_prestamo_{prestamo["id"]}']
+                                        st.rerun()
+                    
+                    st.divider()
+            
+            conn.close()
             
             # Resumen de estados
-            col1, col2, col3 = st.columns(3)
+            st.markdown("#### 📊 Resumen de Estados")
+            col1, col2, col3, col4 = st.columns(4)
             with col1:
+                total_activos = len(prestamos_activos)
+                st.metric("📋 Total Activos", total_activos)
+            with col2:
                 vigentes = len(prestamos_activos[prestamos_activos['estado_vencimiento'] == 'VIGENTE'])
                 st.metric("✅ Vigentes", vigentes)
-            with col2:
+            with col3:
                 por_vencer = len(prestamos_activos[prestamos_activos['estado_vencimiento'] == 'POR VENCER'])
                 st.metric("⚠️ Por Vencer", por_vencer)
-            with col3:
+            with col4:
                 vencidos = len(prestamos_activos[prestamos_activos['estado_vencimiento'] == 'VENCIDO'])
                 st.metric("🚨 Vencidos", vencidos)
+                
         else:
-            st.info("No hay préstamos activos")
+            st.info("ℹ️ No hay préstamos activos en este momento")
+            st.markdown("Para registrar un nuevo préstamo, ir a la pestaña **'Nuevo Préstamo'**")
     
     with tab3:
-        st.subheader("↩️ Registrar Devolución")
+        st.subheader("↩️ Registro Alternativo de Devolución")
+        st.info("💡 **Tip:** La forma más fácil de registrar devoluciones es desde la pestaña **'Préstamos Activos'** usando el botón 'Devolver' de cada préstamo.")
+        
+        st.markdown("---")
+        st.markdown("#### 🔍 Búsqueda Manual de Préstamo")
         
         conn = db.get_connection()
         prestamos_activos = pd.read_sql_query("""
             SELECT p.id, e.codigo, e.nombre as elemento, 
                    b.nombre as beneficiario,
                    h.nombre as hermano_solicitante,
-                   p.fecha_prestamo
+                   p.fecha_prestamo, p.fecha_devolucion_estimada
             FROM prestamos p
             JOIN elementos e ON p.elemento_id = e.id
             JOIN beneficiarios b ON p.beneficiario_id = b.id
@@ -766,49 +868,77 @@ def gestionar_prestamos():
         """, conn)
         
         if not prestamos_activos.empty:
-            col1, col2 = st.columns(2)
+            # Búsqueda por código o beneficiario
+            busqueda = st.text_input("🔍 Buscar por código de elemento o nombre de beneficiario:", placeholder="Ej: SR-001 o Juan Pérez")
             
-            with col1:
-                prestamo_id = st.selectbox(
-                    "Seleccionar Préstamo a Devolver",
-                    options=prestamos_activos['id'].tolist(),
-                    format_func=lambda x: f"{prestamos_activos[prestamos_activos['id'] == x]['codigo'].iloc[0]} - {prestamos_activos[prestamos_activos['id'] == x]['elemento'].iloc[0]} (Beneficiario: {prestamos_activos[prestamos_activos['id'] == x]['beneficiario'].iloc[0]})"
-                )
-            
-            with col2:
-                fecha_devolucion = st.date_input("Fecha de Devolución", value=date.today())
-                recibido_por = st.text_input("Recibido por*")
-                observaciones_devolucion = st.text_area("Observaciones de la Devolución")
-            
-            if st.button("✅ Registrar Devolución"):
-                if recibido_por:
-                    try:
-                        cursor = conn.cursor()
-                        
-                        # Obtener elemento_id del préstamo
-                        cursor.execute("SELECT elemento_id FROM prestamos WHERE id = ?", (prestamo_id,))
-                        elemento_id = cursor.fetchone()[0]
-                        
-                        # Actualizar préstamo
-                        cursor.execute("""
-                            UPDATE prestamos 
-                            SET fecha_devolucion_real = ?, estado = 'devuelto',
-                                observaciones_devolucion = ?, recibido_por = ?
-                            WHERE id = ?
-                        """, (fecha_devolucion, observaciones_devolucion, recibido_por, prestamo_id))
-                        
-                        # Actualizar estado del elemento
-                        cursor.execute("UPDATE elementos SET estado = 'disponible' WHERE id = ?", (elemento_id,))
-                        
-                        conn.commit()
-                        st.success("✅ Devolución registrada exitosamente")
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"❌ Error al registrar devolución: {e}")
+            if busqueda:
+                # Filtrar préstamos que coincidan con la búsqueda
+                prestamos_filtrados = prestamos_activos[
+                    prestamos_activos['codigo'].str.contains(busqueda, case=False, na=False) |
+                    prestamos_activos['beneficiario'].str.contains(busqueda, case=False, na=False) |
+                    prestamos_activos['elemento'].str.contains(busqueda, case=False, na=False)
+                ]
+                
+                if not prestamos_filtrados.empty:
+                    st.markdown("#### 📋 Préstamos Encontrados:")
+                    for idx, prestamo in prestamos_filtrados.iterrows():
+                        with st.expander(f"📄 {prestamo['codigo']} - {prestamo['elemento']} (Beneficiario: {prestamo['beneficiario']})"):
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.write(f"**Elemento:** {prestamo['elemento']}")
+                                st.write(f"**Beneficiario:** {prestamo['beneficiario']}")
+                                st.write(f"**Hermano:** {prestamo['hermano_solicitante']}")
+                            with col2:
+                                st.write(f"**Fecha Préstamo:** {prestamo['fecha_prestamo']}")
+                                st.write(f"**Devolución Prevista:** {prestamo['fecha_devolucion_estimada']}")
+                            
+                            if st.button(f"↩️ Registrar Devolución", key=f"dev_alt_{prestamo['id']}", type="primary"):
+                                st.session_state[f'devolver_alternativo_{prestamo["id"]}'] = True
+                            
+                            # Formulario de devolución
+                            if st.session_state.get(f'devolver_alternativo_{prestamo["id"]}', False):
+                                with st.form(f"devolucion_alternativa_{prestamo['id']}"):
+                                    fecha_devolucion = st.date_input("Fecha de Devolución", value=date.today())
+                                    recibido_por = st.text_input("Recibido por*")
+                                    observaciones_devolucion = st.text_area("Observaciones de la Devolución")
+                                    
+                                    if st.form_submit_button("✅ Confirmar Devolución"):
+                                        if recibido_por:
+                                            try:
+                                                cursor = conn.cursor()
+                                                
+                                                # Obtener elemento_id del préstamo
+                                                cursor.execute("SELECT elemento_id FROM prestamos WHERE id = ?", (prestamo['id'],))
+                                                elemento_id = cursor.fetchone()[0]
+                                                
+                                                # Actualizar préstamo
+                                                cursor.execute("""
+                                                    UPDATE prestamos 
+                                                    SET fecha_devolucion_real = ?, estado = 'devuelto',
+                                                        observaciones_devolucion = ?, recibido_por = ?
+                                                    WHERE id = ?
+                                                """, (fecha_devolucion, observaciones_devolucion, recibido_por, prestamo['id']))
+                                                
+                                                # Actualizar estado del elemento
+                                                cursor.execute("UPDATE elementos SET estado = 'disponible' WHERE id = ?", (elemento_id,))
+                                                
+                                                conn.commit()
+                                                st.success("✅ Devolución registrada exitosamente")
+                                                del st.session_state[f'devolver_alternativo_{prestamo["id"]}']
+                                                st.rerun()
+                                            except Exception as e:
+                                                st.error(f"❌ Error al registrar devolución: {e}")
+                                        else:
+                                            st.error("❌ El campo 'Recibido por' es obligatorio")
                 else:
-                    st.error("❌ El campo 'Recibido por' es obligatorio")
+                    st.warning(f"❌ No se encontraron préstamos que coincidan con '{busqueda}'")
+            else:
+                st.markdown("#### 📋 Todos los Préstamos Activos:")
+                # Mostrar lista simplificada de todos los préstamos
+                for idx, prestamo in prestamos_activos.iterrows():
+                    st.markdown(f"- **{prestamo['codigo']}** - {prestamo['elemento']} (Beneficiario: {prestamo['beneficiario']})")
         else:
-            st.info("No hay préstamos activos para devolver")
+            st.info("ℹ️ No hay préstamos activos para devolver")
         
         conn.close()
 
