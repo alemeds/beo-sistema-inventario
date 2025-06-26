@@ -228,7 +228,7 @@ def authenticate():
                 else:
                     st.error("Credenciales incorrectas")
         
-        st.info("👤 Usuario: beo_admin | 🔑 Contraseña: beo2025")
+        st.info("👤 Usuario: beo_admin Version 4 | 🔑 Contraseña: beo2025")
         st.markdown("---")
         st.caption("Sistema de Gestión del Banco de Elementos Ortopédicos")
         return False
@@ -795,7 +795,7 @@ def gestionar_hermanos():
     """Gestión de hermanos"""
     st.header("👨‍🤝‍👨 Gestión de Hermanos")
     
-    tab1, tab2, tab3 = st.tabs(["Nuevo Hermano", "Lista de Hermanos", "📚 Historial por Hermano"])
+    tab1, tab2, tab3, tab4 = st.tabs(["Nuevo Hermano", "Lista de Hermanos", "✏️ Editar Hermano", "📚 Historial por Hermano"])
     
     with tab1:
         try:
@@ -876,12 +876,156 @@ def gestionar_hermanos():
             
             if not hermanos_df.empty:
                 st.dataframe(hermanos_df, use_container_width=True)
+                st.caption(f"📊 Total de hermanos activos: {len(hermanos_df)}")
             else:
                 st.info("No hay hermanos registrados")
         except Exception as e:
             st.error(f"Error al cargar hermanos: {e}")
     
     with tab3:
+        st.subheader("✏️ Editar Datos de Hermano")
+        st.markdown("**Actualizar información de contacto, dirección, grado, etc.**")
+        
+        try:
+            conn = db.get_connection()
+            hermanos_df = pd.read_sql_query("""
+                SELECT h.id, h.nombre, h.telefono, h.logia_id, h.grado, h.direccion, 
+                       h.email, h.fecha_iniciacion, h.observaciones, l.nombre as logia_nombre
+                FROM hermanos h
+                LEFT JOIN logias l ON h.logia_id = l.id
+                WHERE h.activo = 1
+                ORDER BY h.nombre
+            """, conn)
+            
+            logias_df = pd.read_sql_query("SELECT id, nombre, numero FROM logias WHERE activo = 1 ORDER BY numero, nombre", conn)
+            
+            if not hermanos_df.empty:
+                # Seleccionar hermano a editar
+                hermano_a_editar = st.selectbox(
+                    "Seleccionar Hermano a Editar:",
+                    options=hermanos_df['id'].tolist(),
+                    format_func=lambda x: f"{hermanos_df[hermanos_df['id'] == x]['nombre'].iloc[0]} - {hermanos_df[hermanos_df['id'] == x]['logia_nombre'].iloc[0]}"
+                )
+                
+                # Obtener datos actuales del hermano
+                hermano_actual = hermanos_df[hermanos_df['id'] == hermano_a_editar].iloc[0]
+                
+                st.markdown("---")
+                st.markdown(f"#### 📝 Editando: {hermano_actual['nombre']}")
+                
+                with st.form(f"editar_hermano_{hermano_a_editar}"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        nuevo_nombre = st.text_input("Nombre Completo*", value=hermano_actual['nombre'])
+                        nuevo_telefono = st.text_input("Teléfono", value=hermano_actual['telefono'] or "")
+                        
+                        if not logias_df.empty:
+                            # Encontrar el índice de la logia actual
+                            logia_actual_idx = logias_df[logias_df['id'] == hermano_actual['logia_id']].index
+                            if len(logia_actual_idx) > 0:
+                                logia_default_idx = logia_actual_idx[0]
+                            else:
+                                logia_default_idx = 0
+                            
+                            nueva_logia_id = st.selectbox(
+                                "Logia*",
+                                options=logias_df['id'].tolist(),
+                                index=logia_default_idx,
+                                format_func=lambda x: f"{logias_df[logias_df['id'] == x]['nombre'].iloc[0]} N°{logias_df[logias_df['id'] == x]['numero'].iloc[0] if pd.notna(logias_df[logias_df['id'] == x]['numero'].iloc[0]) else 'S/N'}"
+                            )
+                        else:
+                            st.error("No hay logias disponibles")
+                            nueva_logia_id = hermano_actual['logia_id']
+                    
+                    with col2:
+                        grados_opciones = ["Apr:.", "Comp:.", "M:.M:.", "Gr:. 4°", "Gr:. 18°", "Gr:. 30°", "Gr:. 32°", "Gr:. 33°", "Otro"]
+                        grado_actual_idx = grados_opciones.index(hermano_actual['grado']) if hermano_actual['grado'] in grados_opciones else 0
+                        
+                        nuevo_grado = st.selectbox(
+                            "Grado",
+                            options=grados_opciones,
+                            index=grado_actual_idx
+                        )
+                        nueva_direccion = st.text_area("Dirección", value=hermano_actual['direccion'] or "")
+                        nuevo_email = st.text_input("Email", value=hermano_actual['email'] or "")
+                        
+                        # Fecha de iniciación
+                        fecha_actual = None
+                        if hermano_actual['fecha_iniciacion']:
+                            try:
+                                fecha_actual = datetime.strptime(hermano_actual['fecha_iniciacion'], '%Y-%m-%d').date()
+                            except:
+                                fecha_actual = None
+                        
+                        nueva_fecha_iniciacion = st.date_input(
+                            "Fecha de Iniciación",
+                            value=fecha_actual,
+                            min_value=date(1960, 1, 1),
+                            max_value=date.today(),
+                            help="Fecha de iniciación masónica"
+                        )
+                        nuevas_observaciones = st.text_area("Observaciones", value=hermano_actual['observaciones'] or "")
+                    
+                    # Mostrar cambios
+                    cambios = []
+                    if nuevo_nombre != hermano_actual['nombre']:
+                        cambios.append(f"Nombre: '{hermano_actual['nombre']}' → '{nuevo_nombre}'")
+                    if nuevo_telefono != (hermano_actual['telefono'] or ""):
+                        cambios.append(f"Teléfono: '{hermano_actual['telefono'] or ''}' → '{nuevo_telefono}'")
+                    if nueva_logia_id != hermano_actual['logia_id']:
+                        cambios.append(f"Logia: {hermano_actual['logia_nombre']} → {logias_df[logias_df['id'] == nueva_logia_id]['nombre'].iloc[0]}")
+                    if nuevo_grado != hermano_actual['grado']:
+                        cambios.append(f"Grado: '{hermano_actual['grado']}' → '{nuevo_grado}'")
+                    if nueva_direccion != (hermano_actual['direccion'] or ""):
+                        cambios.append(f"Dirección: '{hermano_actual['direccion'] or ''}' → '{nueva_direccion}'")
+                    if nuevo_email != (hermano_actual['email'] or ""):
+                        cambios.append(f"Email: '{hermano_actual['email'] or ''}' → '{nuevo_email}'")
+                    
+                    if cambios:
+                        st.markdown("#### 🔄 Cambios detectados:")
+                        for cambio in cambios:
+                            st.write(f"• {cambio}")
+                    else:
+                        st.info("💡 No se detectaron cambios")
+                    
+                    col_btn1, col_btn2 = st.columns(2)
+                    with col_btn1:
+                        actualizar = st.form_submit_button("✅ Actualizar Hermano", type="primary", use_container_width=True)
+                    with col_btn2:
+                        if st.form_submit_button("❌ Cancelar", use_container_width=True):
+                            st.rerun()
+                    
+                    if actualizar:
+                        if nuevo_nombre and nueva_logia_id:
+                            try:
+                                cursor = conn.cursor()
+                                cursor.execute("""
+                                    UPDATE hermanos 
+                                    SET nombre = ?, telefono = ?, logia_id = ?, grado = ?, 
+                                        direccion = ?, email = ?, fecha_iniciacion = ?, observaciones = ?
+                                    WHERE id = ?
+                                """, (nuevo_nombre, nuevo_telefono, nueva_logia_id, nuevo_grado,
+                                     nueva_direccion, nuevo_email, nueva_fecha_iniciacion, 
+                                     nuevas_observaciones, hermano_a_editar))
+                                conn.commit()
+                                
+                                st.success("✅ Hermano actualizado exitosamente")
+                                st.balloons()
+                                time.sleep(1)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"❌ Error al actualizar hermano: {e}")
+                        else:
+                            st.error("❌ Nombre y logia son obligatorios")
+            else:
+                st.warning("No hay hermanos registrados para editar")
+            
+            conn.close()
+        except Exception as e:
+            st.error(f"Error al cargar datos para edición: {e}")
+    
+    with tab4:
         st.subheader("📚 Historial de Préstamos por Hermano")
         st.markdown("**Ver todos los préstamos históricos de un hermano específico**")
         
@@ -1485,7 +1629,7 @@ def gestionar_prestamos():
                             format_func=lambda x: f"{hermanos_df.iloc[x]['nombre']} - {hermanos_df.iloc[x]['logia']} ({hermanos_df.iloc[x]['grado']})"
                         )
                         hermano_seleccionado = hermanos_df.iloc[hermano_idx]
-                        hermano_solicitante_id = hermano_seleccionado['id']
+                        hermano_solicitante_id = int(hermano_seleccionado['id'])  # Asegurar que sea int
                         
                         # Mostrar información del hermano
                         st.markdown("##### 📋 Información del Hermano Solicitante")
@@ -1528,7 +1672,7 @@ def gestionar_prestamos():
                             format_func=lambda x: hermanos_df.iloc[x]['nombre']
                         )
                         hermano_beneficiario_seleccionado = hermanos_df.iloc[hermano_beneficiario_idx]
-                        hermano_beneficiario_id = hermano_beneficiario_seleccionado['id']
+                        hermano_beneficiario_id = int(hermano_beneficiario_seleccionado['id'])  # Asegurar int
                         beneficiario_nombre = hermano_beneficiario_seleccionado['nombre']
                         beneficiario_telefono = hermano_beneficiario_seleccionado['telefono']
                         logia_beneficiario = hermano_beneficiario_seleccionado['logia']
@@ -1552,7 +1696,7 @@ def gestionar_prestamos():
                             format_func=lambda x: hermanos_df.iloc[x]['nombre'],
                             key="hermano_responsable"
                         )
-                        hermano_responsable_id = hermanos_df.iloc[hermano_resp_idx]['id']
+                        hermano_responsable_id = int(hermanos_df.iloc[hermano_resp_idx]['id'])  # Asegurar int
                         logia_beneficiario = hermanos_df.iloc[hermano_resp_idx]['logia']
                         st.info(f"Hermano responsable: {hermanos_df.iloc[hermano_resp_idx]['nombre']}")
                     else:
@@ -1582,11 +1726,12 @@ def gestionar_prestamos():
                     """, conn)
                     
                     if not elementos_disponibles.empty:
-                        elemento_id = st.selectbox(
+                        elemento_selected = st.selectbox(
                             "Elemento a Prestar*",
                             options=elementos_disponibles['id'].tolist(),
                             format_func=lambda x: f"{elementos_disponibles[elementos_disponibles['id'] == x]['codigo'].iloc[0]} - {elementos_disponibles[elementos_disponibles['id'] == x]['nombre'].iloc[0]} ({elementos_disponibles[elementos_disponibles['id'] == x]['deposito'].iloc[0]})"
                         )
+                        elemento_id = int(elemento_selected)  # Asegurar que sea int
                     else:
                         st.error("No hay elementos disponibles para préstamo")
                         elemento_id = None
@@ -1645,13 +1790,51 @@ def gestionar_prestamos():
                         conn = db.get_connection()
                         cursor = conn.cursor()
                         
-                        # Verificar que todos los IDs existen antes de insertar
-                        # Verificar hermano solicitante
-                        cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_solicitante_id,))
-                        if not cursor.fetchone():
+                        # Debug: Verificar hermano solicitante con más detalle
+                        st.write(f"🔍 Debug: Buscando hermano solicitante con ID: {hermano_solicitante_id} (tipo: {type(hermano_solicitante_id)})")
+                        cursor.execute("SELECT id, nombre, activo FROM hermanos WHERE id = ?", (hermano_solicitante_id,))
+                        hermano_encontrado = cursor.fetchone()
+                        
+                        if not hermano_encontrado:
                             st.error("❌ Error: Hermano solicitante no encontrado en la base de datos")
+                            
+                            # Mostrar todos los hermanos disponibles para debug
+                            st.write("🔍 Debug: Hermanos en base de datos:")
+                            cursor.execute("SELECT id, nombre, activo FROM hermanos ORDER BY id")
+                            todos_hermanos = cursor.fetchall()
+                            for h in todos_hermanos:
+                                st.write(f"  - ID: {h[0]} (tipo: {type(h[0])}), Nombre: {h[1]}, Activo: {h[2]}")
+                            
+                            # Mostrar el ID que se está buscando
+                            st.write(f"🔍 Debug: Se busca el ID: {hermano_solicitante_id} (tipo: {type(hermano_solicitante_id)})")
+                            
                             conn.close()
                             return
+                        elif hermano_encontrado[2] != 1:  # Si no está activo
+                            st.error("❌ Error: Hermano solicitante no está activo")
+                            conn.close()
+                            return
+                        
+                        st.success(f"✅ Hermano solicitante verificado: {hermano_encontrado[1]}")
+                        
+                        # Verificar elemento
+                        st.write(f"🔍 Debug: Verificando elemento con ID: {elemento_id} (tipo: {type(elemento_id)})")
+                        cursor.execute("SELECT id, codigo, nombre, estado FROM elementos WHERE id = ? AND estado = 'disponible' AND activo = 1", (elemento_id,))
+                        elemento_encontrado = cursor.fetchone()
+                        if not elemento_encontrado:
+                            st.error("❌ Error: Elemento no disponible o no encontrado")
+                            
+                            # Debug de elementos
+                            cursor.execute("SELECT id, codigo, nombre, estado, activo FROM elementos ORDER BY id")
+                            todos_elementos = cursor.fetchall()
+                            st.write("🔍 Debug: Elementos en base de datos:")
+                            for e in todos_elementos:
+                                st.write(f"  - ID: {e[0]}, Código: {e[1]}, Estado: {e[3]}, Activo: {e[4]}")
+                            
+                            conn.close()
+                            return
+                        
+                        st.success(f"✅ Elemento verificado: {elemento_encontrado[1]} ({elemento_encontrado[2]})")
                         
                         # Verificar elemento
                         cursor.execute("SELECT id FROM elementos WHERE id = ? AND estado = 'disponible' AND activo = 1", (elemento_id,))
@@ -1663,6 +1846,7 @@ def gestionar_prestamos():
                         # Crear beneficiario
                         if tipo_beneficiario == "Hermano":
                             # Verificar hermano beneficiario
+                            st.write(f"🔍 Debug: Verificando hermano beneficiario con ID: {hermano_beneficiario_id}")
                             cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_beneficiario_id,))
                             if not cursor.fetchone():
                                 st.error("❌ Error: Hermano beneficiario no encontrado en la base de datos")
@@ -1677,6 +1861,7 @@ def gestionar_prestamos():
                                  None, beneficiario_nombre, beneficiario_telefono or "", direccion_entrega))
                         else:  # Familiar
                             # Verificar hermano responsable
+                            st.write(f"🔍 Debug: Verificando hermano responsable con ID: {hermano_responsable_id}")
                             cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_responsable_id,))
                             if not cursor.fetchone():
                                 st.error("❌ Error: Hermano responsable no encontrado en la base de datos")
@@ -2354,6 +2539,18 @@ def debug_foreign_keys():
         # Verificar foreign keys habilitadas
         fk_status = cursor.execute("PRAGMA foreign_keys").fetchone()[0]
         st.sidebar.caption(f"Foreign Keys: {'ON' if fk_status else 'OFF'}")
+        
+        # Mostrar hermanos específicos
+        st.sidebar.markdown("**👨‍🤝‍👨 Hermanos activos:**")
+        hermanos = cursor.execute("SELECT id, nombre FROM hermanos WHERE activo = 1 ORDER BY nombre LIMIT 5").fetchall()
+        for hermano in hermanos:
+            st.sidebar.caption(f"ID: {hermano[0]} - {hermano[1]}")
+        
+        # Mostrar elementos disponibles
+        st.sidebar.markdown("**🦽 Elementos disponibles:**")
+        elementos = cursor.execute("SELECT id, codigo, nombre FROM elementos WHERE estado = 'disponible' AND activo = 1 ORDER BY codigo LIMIT 5").fetchall()
+        for elemento in elementos:
+            st.sidebar.caption(f"ID: {elemento[0]} - {elemento[1]}")
         
         conn.close()
     except Exception as e:
