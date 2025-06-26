@@ -1512,6 +1512,14 @@ def gestionar_prestamos():
                 st.markdown("#### 🎯 ¿A quién va dirigido el pedido de préstamo?, ¿Es Hermano o Familiar?")
                 tipo_beneficiario = st.radio("Tipo de beneficiario:", ["Hermano", "Familiar"])
                 
+                # Inicializar variables
+                hermano_beneficiario_id = None
+                hermano_responsable_id = None
+                parentesco = None
+                beneficiario_nombre = ""
+                beneficiario_telefono = ""
+                logia_beneficiario = ""
+                
                 if tipo_beneficiario == "Hermano":
                     if hermanos_df is not None and not hermanos_df.empty:
                         hermano_beneficiario_idx = st.selectbox(
@@ -1519,17 +1527,13 @@ def gestionar_prestamos():
                             options=range(len(hermanos_df)),
                             format_func=lambda x: hermanos_df.iloc[x]['nombre']
                         )
-                        beneficiario_nombre = hermanos_df.iloc[hermano_beneficiario_idx]['nombre']
-                        beneficiario_telefono = hermanos_df.iloc[hermano_beneficiario_idx]['telefono']
-                        parentesco = None
-                        hermano_responsable_id = None
-                        logia_beneficiario = hermanos_df.iloc[hermano_beneficiario_idx]['logia']
+                        hermano_beneficiario_seleccionado = hermanos_df.iloc[hermano_beneficiario_idx]
+                        hermano_beneficiario_id = hermano_beneficiario_seleccionado['id']
+                        beneficiario_nombre = hermano_beneficiario_seleccionado['nombre']
+                        beneficiario_telefono = hermano_beneficiario_seleccionado['telefono']
+                        logia_beneficiario = hermano_beneficiario_seleccionado['logia']
                     else:
-                        beneficiario_nombre = ""
-                        beneficiario_telefono = ""
-                        parentesco = None
-                        hermano_responsable_id = None
-                        logia_beneficiario = ""
+                        st.error("No hay hermanos disponibles")
                 
                 else:  # Familiar
                     st.markdown("**Si es Familiar:**")
@@ -1552,8 +1556,7 @@ def gestionar_prestamos():
                         logia_beneficiario = hermanos_df.iloc[hermano_resp_idx]['logia']
                         st.info(f"Hermano responsable: {hermanos_df.iloc[hermano_resp_idx]['nombre']}")
                     else:
-                        hermano_responsable_id = None
-                        logia_beneficiario = ""
+                        st.error("No hay hermanos disponibles")
                     
                     beneficiario_nombre = st.text_input("Nombre del Familiar*")
                     beneficiario_telefono = st.text_input("Teléfono del Familiar")
@@ -1622,21 +1625,70 @@ def gestionar_prestamos():
                 submit_prestamo = st.form_submit_button("📋 Registrar Préstamo BEO", use_container_width=True)
             
             if submit_prestamo:
-                if (hermano_solicitante_id and elemento_id and beneficiario_nombre and 
-                    direccion_entrega and entregado_por):
+                # Validación básica
+                if not hermano_solicitante_id:
+                    st.error("❌ Debe seleccionar un hermano solicitante")
+                elif not elemento_id:
+                    st.error("❌ Debe seleccionar un elemento")
+                elif not beneficiario_nombre:
+                    st.error("❌ Debe especificar el nombre del beneficiario")
+                elif not direccion_entrega:
+                    st.error("❌ Debe especificar la dirección de entrega")
+                elif not entregado_por:
+                    st.error("❌ Debe especificar quien entrega el elemento")
+                elif tipo_beneficiario == "Hermano" and not hermano_beneficiario_id:
+                    st.error("❌ Debe seleccionar un hermano beneficiario")
+                elif tipo_beneficiario == "Familiar" and not hermano_responsable_id:
+                    st.error("❌ Debe seleccionar el hermano responsable del familiar")
+                else:
                     try:
                         conn = db.get_connection()
                         cursor = conn.cursor()
                         
+                        # Verificar que todos los IDs existen antes de insertar
+                        # Verificar hermano solicitante
+                        cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_solicitante_id,))
+                        if not cursor.fetchone():
+                            st.error("❌ Error: Hermano solicitante no encontrado en la base de datos")
+                            conn.close()
+                            return
+                        
+                        # Verificar elemento
+                        cursor.execute("SELECT id FROM elementos WHERE id = ? AND estado = 'disponible' AND activo = 1", (elemento_id,))
+                        if not cursor.fetchone():
+                            st.error("❌ Error: Elemento no disponible o no encontrado")
+                            conn.close()
+                            return
+                        
                         # Crear beneficiario
-                        cursor.execute("""
-                            INSERT INTO beneficiarios (tipo, hermano_id, hermano_responsable_id, 
-                                                     parentesco, nombre, telefono, direccion)
+                        if tipo_beneficiario == "Hermano":
+                            # Verificar hermano beneficiario
+                            cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_beneficiario_id,))
+                            if not cursor.fetchone():
+                                st.error("❌ Error: Hermano beneficiario no encontrado en la base de datos")
+                                conn.close()
+                                return
+                            
+                            cursor.execute("""
+                                INSERT INTO beneficiarios (tipo, hermano_id, hermano_responsable_id, 
+                                                         parentesco, nombre, telefono, direccion)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            """, (tipo_beneficiario.lower(), hermano_beneficiario_id, None,
+                                 None, beneficiario_nombre, beneficiario_telefono or "", direccion_entrega))
+                        else:  # Familiar
+                            # Verificar hermano responsable
+                            cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_responsable_id,))
+                            if not cursor.fetchone():
+                                st.error("❌ Error: Hermano responsable no encontrado en la base de datos")
+                                conn.close()
+                                return
+                            
+                            cursor.execute("""
+                                INSERT INTO beneficiarios (tipo, hermano_id, hermano_responsable_id, 
+                                                         parentesco, nombre, telefono, direccion)
                             VALUES (?, ?, ?, ?, ?, ?, ?)
-                        """, (tipo_beneficiario.lower(), 
-                             hermano_solicitante_id if tipo_beneficiario == "Hermano" else None,
-                             hermano_responsable_id if tipo_beneficiario == "Familiar" else None,
-                             parentesco, beneficiario_nombre, beneficiario_telefono, direccion_entrega))
+                            """, (tipo_beneficiario.lower(), None, hermano_responsable_id,
+                                 parentesco, beneficiario_nombre, beneficiario_telefono or "", direccion_entrega))
                         
                         beneficiario_id = cursor.lastrowid
                         
@@ -1648,8 +1700,8 @@ def gestionar_prestamos():
                              autorizado_por, entregado_por)
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """, (fecha_prestamo, elemento_id, beneficiario_id, hermano_solicitante_id,
-                             duracion_dias, fecha_devolucion_estimada, observaciones_prestamo,
-                             autorizado_por, entregado_por))
+                             duracion_dias, fecha_devolucion_estimada, observaciones_prestamo or "",
+                             autorizado_por or "", entregado_por))
                         
                         # Actualizar estado del elemento
                         cursor.execute("UPDATE elementos SET estado = 'prestado' WHERE id = ?", (elemento_id,))
@@ -1665,11 +1717,37 @@ def gestionar_prestamos():
                         conn.close()
                         st.success("✅ Préstamo BEO registrado exitosamente")
                         st.balloons()
+                        time.sleep(1)
                         st.rerun()
+                        
+                    except sqlite3.IntegrityError as e:
+                        st.error(f"❌ Error de integridad de base de datos: {e}")
+                        
+                        # Debug information
+                        with st.expander("🔍 Información de Debug"):
+                            st.write("**IDs utilizados:**")
+                            st.write(f"- Hermano solicitante ID: {hermano_solicitante_id}")
+                            st.write(f"- Elemento ID: {elemento_id}")
+                            if tipo_beneficiario == "Hermano":
+                                st.write(f"- Hermano beneficiario ID: {hermano_beneficiario_id}")
+                            else:
+                                st.write(f"- Hermano responsable ID: {hermano_responsable_id}")
+                            
+                            st.write("**Datos del formulario:**")
+                            st.write(f"- Tipo beneficiario: {tipo_beneficiario}")
+                            st.write(f"- Nombre beneficiario: {beneficiario_nombre}")
+                            st.write(f"- Fecha préstamo: {fecha_prestamo}")
+                            st.write(f"- Duración días: {duracion_dias}")
+                        
+                        st.info("💡 Verifica que todos los registros (hermanos, elementos, logias) estén correctamente creados antes de crear el préstamo")
+                        if 'conn' in locals():
+                            conn.close()
+                            
                     except Exception as e:
                         st.error(f"❌ Error al registrar préstamo: {e}")
-                else:
-                    st.error("❌ Todos los campos marcados con * son obligatorios")
+                        st.info("💡 Contacta al administrador si el problema persiste")
+                        if 'conn' in locals():
+                            conn.close()
     
     with tab2:
         st.subheader("📋 Préstamos Activos - Monitoreo Completo")
@@ -2258,6 +2336,29 @@ def mostrar_dashboard():
     except Exception as e:
         st.error(f"Error al cargar dashboard: {e}")
 
+def debug_foreign_keys():
+    """Función de debug para verificar el estado de las foreign keys"""
+    try:
+        conn = db.get_connection()
+        cursor = conn.cursor()
+        
+        st.sidebar.markdown("---")
+        st.sidebar.subheader("🔍 Debug Info")
+        
+        # Contar registros en cada tabla
+        tables = ['logias', 'hermanos', 'elementos', 'depositos', 'categorias', 'beneficiarios', 'prestamos']
+        for table in tables:
+            count = cursor.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            st.sidebar.caption(f"{table}: {count} registros")
+        
+        # Verificar foreign keys habilitadas
+        fk_status = cursor.execute("PRAGMA foreign_keys").fetchone()[0]
+        st.sidebar.caption(f"Foreign Keys: {'ON' if fk_status else 'OFF'}")
+        
+        conn.close()
+    except Exception as e:
+        st.sidebar.error(f"Debug error: {e}")
+
 def main():
     """Función principal de la aplicación"""
     if not authenticate():
@@ -2286,6 +2387,9 @@ def main():
         list(menu_options.keys()),
         format_func=lambda x: f"{menu_options[x]} {x}"
     )
+    
+    # Añadir debug info
+    debug_foreign_keys()
     
     st.sidebar.markdown("---")
     st.sidebar.caption("Banco de Elementos Ortopédicos v2.1")
