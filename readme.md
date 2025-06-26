@@ -1,217 +1,222 @@
-# 🏛️ BEO - Banco de Elementos Ortopédicos
+# 🏛️ Sistema BEO - Gestión de Inventario Ortopédico
 
-Sistema de gestión integral para el control de inventario y préstamos de elementos ortopédicos destinado específicamente a organizaciones masónicas filantrópicas.
+## 🚀 Versión 2.0 - 
 
-## ✨ Características Principales
+Esta versión corregida soluciona los **problemas críticos de inconsistencia** identificados en el sistema original:
 
-### 🏛️ Gestión Masónica Completa
-- **Gestión de Logias**: Control de logias con Venerables Maestros y Hospitalarios
-- **Registro de Hermanos**: Base de datos completa con grados masónicos
-- **Estructura Jerárquica**: Respeta la organización masónica tradicional
+### ❌ Problemas Originales
+- ✅ **SOLUCIONADO**: Inconsistencia entre elementos prestados y préstamos activos
+- ✅ **SOLUCIONADO**: Debug mostraba "No hay préstamos" cuando sí los había
+- ✅ **SOLUCIONADO**: Elementos aparecían como prestados sin préstamo activo correspondiente
+- ✅ **SOLUCIONADO**: Sincronización deficiente entre tablas de la base de datos
 
-### 🦽 Control de Inventario Avanzado
-- **Gestión de Elementos**: Inventario detallado con códigos únicos
-- **Múltiples Depósitos**: Control de elementos en diferentes ubicaciones
-- **Estados Dinámicos**: Disponible, Prestado, En Mantenimiento
-- **Cambio Manual de Estados**: Para correcciones y casos especiales
+### 🔧 Mejoras Implementadas
 
-### 📋 Sistema de Préstamos BEO
-- **Formulario Oficial**: Replica exactamente el formulario físico BEO
-- **Beneficiarios Duales**: Hermanos y familiares con control de parentesco
-- **Cálculo Automático**: Fechas de devolución calculadas dinámicamente
-- **Seguimiento Completo**: Desde préstamo hasta devolución
+#### 1. **Base de Datos Robusta**
+- **Triggers automáticos** que mantienen sincronización entre estados
+- **Constraints** que previenen estados inválidos
+- **Foreign Keys** habilitadas para integridad referencial
+- **Sistema de auditoría** completo con historial de cambios
 
-### 🔄 Gestión de Devoluciones
-- **Devolución Flexible**: En cualquier momento, antes o después del vencimiento
-- **Selección de Depósito**: Elegir a qué depósito devolver cada elemento
-- **Estados del Elemento**: Evaluación del estado al momento de devolución
-- **Mantenimiento Automático**: Marcado automático para elementos dañados
+#### 2. **Verificación de Integridad**
+- Detección automática de inconsistencias
+- Corrección automática de problemas
+- Dashboard de diagnóstico en tiempo real
+- Alertas cuando se detectan problemas
 
-### 📊 Dashboard y Reportes
-- **Estadísticas en Tiempo Real**: Métricas principales del BEO
-- **Alertas de Vencimiento**: Préstamos próximos a vencer o vencidos
-- **Gráficos Interactivos**: Distribución por categorías y estados
-- **Análisis por Logia**: Uso del BEO por cada logia
+#### 3. **Manejo Seguro de Transacciones**
+- Context managers para conexiones seguras
+- Rollback automático en caso de errores
+- Logging detallado para debugging
+- Prevención de operaciones conflictivas
 
-### 📚 Manual de Usuario Integrado
-- **Guía Completa**: Manual detallado dentro del sistema
-- **Instrucciones Paso a Paso**: Para cada funcionalidad
-- **Preguntas Frecuentes**: Resolución de dudas comunes
-- **Navegación Fácil**: Acceso desde el menú principal
+#### 4. **Interfaz Mejorada**
+- Dashboard con métricas precisas
+- Módulo de devolución corregido
+- Debug detallado y comprensible
+- Verificador de integridad integrado
 
-## 🔐 Acceso al Sistema
+## 📋 Requisitos
 
-### Credenciales de Login
-- **Usuario**: `beo_admin`
-- **Contraseña**: `beo2025`
-
-### Navegación Principal
-1. **📊 Dashboard** - Vista general y estadísticas
-2. **🏛️ Gestión de Logias** - Administrar logias masónicas  
-3. **👨‍🤝‍👨 Gestión de Hermanos** - Registro de hermanos
-4. **🦽 Gestión de Elementos** - Inventario ortopédico completo
-5. **📋 Formulario de Préstamo** - Sistema completo de préstamos
-6. **🏢 Gestión de Depósitos** - Ubicaciones de almacenamiento
-7. **📚 Manual de Usuario** - Guía completa del sistema
-
-## 🚀 Funcionalidades Destacadas
-
-### Formulario de Préstamo BEO
-Replica exactamente el formulario físico actual:
-- ✅ Información del hermano solicitante con datos de logia
-- ✅ Selección de beneficiario (hermano o familiar)
-- ✅ Control de parentesco para familiares
-- ✅ Duración configurable (días o meses)
-- ✅ Dirección de entrega específica
-- ✅ Autorización y responsables de entrega
-
-### Sistema de Alertas Inteligente
-- 🟢 **Vigentes**: Préstamos dentro del plazo normal
-- 🟡 **Por Vencer**: Alertas 7 días antes del vencimiento
-- 🔴 **Vencidos**: Préstamos que superaron la fecha límite
-- 📞 **Información de Contacto**: Para realizar seguimiento efectivo
-
-### Gestión de Estados Avanzada
-- **🔄 Cambio Manual**: Para correcciones administrativas
-- **📝 Historial Completo**: Registro de todos los cambios
-- **⚠️ Validaciones**: Prevención de cambios incorrectos
-- **🔧 Mantenimiento**: Flujo específico para reparaciones
-
-## 🛠️ Tecnología y Arquitectura
-
-### Stack Tecnológico
-- **Frontend**: Streamlit (Python) - Interfaz web responsive
-- **Base de Datos**: SQLite (local) con opción de migración a PostgreSQL
-- **Gráficos**: Plotly - Visualizaciones interactivas
-- **Hosting**: Streamlit Cloud - Despliegue gratuito
-
-### Estructura de Datos
-- **Logias**: Información masónica completa
-- **Hermanos**: Registro con grados y datos de contacto
-- **Elementos**: Inventario detallado con estados
-- **Beneficiarios**: Hermanos y familiares con relaciones
-- **Préstamos**: Ciclo completo con seguimiento temporal
-- **Depósitos**: Múltiples ubicaciones de almacenamiento
-
-## 📈 Reportes y Estadísticas
-
-### Métricas Principales
-- **Inventario Total**: Elementos disponibles vs prestados vs mantenimiento
-- **Actividad por Logia**: Préstamos activos por organización
-- **Cumplimiento**: Estadísticas de devoluciones a tiempo
-- **Utilización**: Elementos más solicitados y categorías populares
-
-### Análisis Disponibles
-- **Distribución por Categorías**: Gráfico de pastel interactivo
-- **Estados de Elementos**: Visualización de disponibilidad
-- **Préstamos por Logia**: Comparativo de uso organizacional
-- **Tendencias Temporales**: Evolución de préstamos en el tiempo
-
-## 🎯 Dirigido Específicamente a
-
-### Organizaciones Masónicas Filantrópicas
-- **Logias Regulares**: Con estructura de Venerable y Hospitalario
-- **Grandes Logias**: Con múltiples logias subordinadas
-- **Organizaciones Filantrópicas**: Que administran ayuda social
-- **Bancos de Elementos**: Especializados en equipos ortopédicos
-
-### Casos de Uso Típicos
-- **Préstamos a Hermanos**: Ayuda directa a miembros de la organización
-- **Asistencia Familiar**: Extensión de la ayuda a familiares
-- **Gestión Multi-Logia**: Control centralizado de múltiples organizaciones
-- **Seguimiento Temporal**: Control de vencimientos y cumplimiento
-
-## 🔧 Instalación y Despliegue
-
-### Instalación Local (Desarrollo)
 ```bash
-# Clonar repositorio
-git clone [URL_REPOSITORIO]
-cd beo-sistema-inventario
-
-# Instalar dependencias
-pip install streamlit pandas plotly
-
-# Ejecutar aplicación
-streamlit run app.py
+pip install streamlit pandas plotly sqlite3
 ```
 
-### Despliegue en la Nube (Producción)
-1. **Streamlit Cloud** (Recomendado)
-   - Subir código a GitHub
-   - Conectar con [share.streamlit.io](https://share.streamlit.io)
-   - Despliegue automático
+## 🚀 Instalación Rápida
 
-2. **Railway / Heroku**
-   - Alternativas con despliegue automático
-   - Configuración mediante git push
+### Opción 1: Sistema Nuevo
+```bash
+# 1. Descargar el código corregido
+# 2. Instalar dependencias
+pip install streamlit pandas plotly
 
-### Migración a Base de Datos Permanente
-- **Supabase**: PostgreSQL gratuito con 500MB
-- **Railway**: Base de datos PostgreSQL incluida  
-- **Configuración**: Scripts de migración incluidos
+# 3. Ejecutar la aplicación
+streamlit run beo_sistema_corregido.py
+```
 
-## 📞 Soporte y Mantenimiento
+### Opción 2: Migrar Sistema Existente
+```bash
+# 1. Hacer backup de su base de datos actual
+cp beo_sistema.db beo_sistema_backup.db
 
-### Manual Integrado
-- **Acceso**: Menú Principal → "📚 Manual de Usuario"
-- **Contenido Completo**: Guías paso a paso para cada función
-- **Búsqueda por Secciones**: Navegación organizada
-- **Preguntas Frecuentes**: Resolución de problemas comunes
+# 2. Ejecutar script de migración
+python migrate_beo.py beo_sistema.db
 
-### Características del Manual
-- **🏠 Introducción**: Visión general del sistema
-- **🏛️ Gestión de Logias**: Registro y administración
-- **👨‍🤝‍👨 Gestión de Hermanos**: Base de datos masónica
-- **🦽 Gestión de Elementos**: Inventario completo
-- **📋 Sistema de Préstamos**: Proceso completo BEO
-- **🔄 Devolución de Elementos**: Guía detallada
-- **🔧 Cambio de Estados**: Procedimientos administrativos
-- **📊 Dashboard y Reportes**: Interpretación de datos
-- **❓ Preguntas Frecuentes**: Solución de problemas
+# 3. Ejecutar sistema corregido
+streamlit run beo_sistema_corregido.py
+```
 
-### Actualizaciones y Mejoras
-- **Versionado**: Control de versiones mediante Git
-- **Feedback**: Sistema de mejoras basado en uso real
-- **Escalabilidad**: Arquitectura preparada para crecimiento
-- **Personalización**: Adaptable a necesidades específicas
+## 🔐 Credenciales por Defecto
+- **Usuario:** `beo_admin`
+- **Contraseña:** `beo2025`
 
-## 📊 Beneficios del Sistema Digital
+## 📊 Funcionalidades Principales
 
-### Para la Organización
-- **Eficiencia**: Reducción del 80% en tiempo de gestión
-- **Transparencia**: Trazabilidad completa de todos los préstamos
-- **Control**: Eliminación de pérdidas y seguimiento efectivo
-- **Profesionalismo**: Imagen moderna y organizada
+### 1. Dashboard Inteligente
+- **Métricas en tiempo real** con verificación de consistencia
+- **Alertas automáticas** cuando se detectan inconsistencias
+- **Gráficos precisos** basados en datos verificados
+- **Debug detallado** para identificar problemas
 
-### Para los Hospitalarios
-- **Facilidad de Uso**: Interfaz intuitiva sin curva de aprendizaje
-- **Alertas Automáticas**: Notificaciones de vencimientos
-- **Reportes Instantáneos**: Información disponible en tiempo real
-- **Menos Paperwork**: Eliminación de formularios físicos
+### 2. Devolución Simple Corregida
+- **Búsqueda precisa** de préstamos activos
+- **Sincronización automática** de estados
+- **Transacciones seguras** que no fallan
+- **Confirmación inmediata** de cambios
 
-### Para los Hermanos
-- **Acceso Rápido**: Consulta inmediata de disponibilidad
-- **Seguimiento Personal**: Historial de sus préstamos
-- **Comunicación Efectiva**: Información clara de vencimientos
-- **Servicio Mejorado**: Proceso más ágil y profesional
+### 3. Gestión de Elementos Robusta
+- **Estados controlados** con validación automática
+- **Cambios manuales seguros** con auditoría
+- **Historial completo** de modificaciones
+- **Prevención de errores** mediante constraints
+
+### 4. Verificador de Integridad
+- **Análisis completo** del estado del sistema
+- **Detección automática** de inconsistencias
+- **Corrección con un clic** de problemas encontrados
+- **Reporte detallado** de operaciones realizadas
+
+## 🔍 Cómo Verificar que Está Funcionando
+
+### Antes de la Corrección:
+```
+❌ Dashboard mostraba: prestado: 1, activo: 1
+❌ Debug decía: "No hay préstamos en el sistema"
+❌ Devolución: "Elementos encontrados para devolución: 0"
+```
+
+### Después de la Corrección:
+```
+✅ Dashboard: elementos prestados = préstamos activos
+✅ Debug: información consistente y detallada
+✅ Devolución: muestra todos los préstamos activos correctamente
+✅ Alertas: notifica inmediatamente si hay inconsistencias
+```
+
+## 🛠️ Script de Migración
+
+El `migrate_beo.py` puede:
+
+1. **Analizar** su base de datos actual
+2. **Crear backup** automático antes de cambios
+3. **Migrar estructura** a la nueva versión
+4. **Corregir inconsistencias** existentes
+5. **Verificar integridad** final
+
+```bash
+# Uso básico
+python migrate_beo.py
+
+# Con ruta específica
+python migrate_beo.py /ruta/a/su/base_datos.db
+```
+
+## 🔧 Características Técnicas
+
+### Triggers de Base de Datos
+```sql
+-- Mantiene sincronización automática
+CREATE TRIGGER actualizar_elemento_prestado
+AFTER INSERT ON prestamos WHEN NEW.estado = 'activo'
+BEGIN
+    UPDATE elementos SET estado = 'prestado' WHERE id = NEW.elemento_id;
+END;
+```
+
+### Verificación en Tiempo Real
+```python
+def verificar_integridad():
+    elementos_prestados = db.execute("SELECT COUNT(*) FROM elementos WHERE estado = 'prestado'")
+    prestamos_activos = db.execute("SELECT COUNT(*) FROM prestamos WHERE estado = 'activo'")
+    return elementos_prestados == prestamos_activos
+```
+
+### Corrección Automática
+```python
+def corregir_inconsistencias():
+    # Corrige elementos huérfanos automáticamente
+    # Sincroniza estados inconsistentes
+    # Registra cambios en auditoría
+```
+
+## 📈 Beneficios de la Corrección
+
+### Para Administradores:
+- **Confiabilidad**: Los datos siempre están sincronizados
+- **Transparencia**: Saben exactamente qué está pasando
+- **Control**: Pueden corregir problemas con un clic
+- **Auditoría**: Historial completo de todos los cambios
+
+### Para Usuarios:
+- **Precisión**: La información mostrada es siempre correcta
+- **Velocidad**: Las operaciones son más rápidas y confiables
+- **Seguridad**: No pueden hacer operaciones que generen inconsistencias
+- **Facilidad**: El sistema se autocorrige automáticamente
+
+## 🆘 Solución de Problemas
+
+### Si encuentra el error original:
+1. Ejecute el **Verificador de Integridad**
+2. Use **Corregir Automáticamente**
+3. Revise el **Dashboard** para confirmar
+
+### Si los triggers no funcionan:
+```sql
+-- Verificar que están habilitados
+PRAGMA foreign_keys = ON;
+
+-- Recrear triggers
+DROP TRIGGER IF EXISTS actualizar_elemento_prestado;
+-- ... recrear todos los triggers
+```
+
+### Si hay errores de permisos:
+```bash
+# Verificar permisos de la base de datos
+chmod 664 beo_sistema.db
+```
+
+## 📞 Soporte
+
+- **Logs**: Revise `beo_migration.log` para detalles
+- **Debug**: Use la sección "🔍 Verificar Integridad"
+- **Backup**: Siempre hay backup automático antes de cambios
+
+## 🏆 Garantía de Funcionamiento
+
+Este sistema corregido **garantiza**:
+
+1. ✅ **Consistencia**: Elementos prestados = Préstamos activos
+2. ✅ **Precisión**: Toda la información mostrada es correcta
+3. ✅ **Confiabilidad**: No más errores de sincronización
+4. ✅ **Auditabilidad**: Historial completo de cambios
+5. ✅ **Recuperación**: Corrección automática de problemas
 
 ---
 
-## 🏛️ Filosofía del Proyecto
+### 🎯 Resultado Final
 
-**"La tecnología al servicio de la filantropía masónica"**
+**Antes**: Sistema con inconsistencias frustrantes
+**Después**: Sistema robusto y confiable al 100%
 
-Este sistema fue diseñado específicamente para honrar los valores masónicos de fraternidad, beneficencia y organización, facilitando la noble labor de asistencia social que realizan las logias a través de sus bancos de elementos ortopédicos.
-
-### Valores Implementados
-- **Fraternidad**: Sistema diseñado para la ayuda mutua
-- **Beneficencia**: Facilitando la labor social organizada  
-- **Organización**: Estructura que respeta la jerarquía masónica
-- **Transparencia**: Registro completo y trazabilidad total
-
----
-
-**Desarrollado con dedicación para el servicio filantrópico masónico** 🏛️
-
-*"En beneficio de la humanidad y gloria del Gran Arquitecto del Universo"*
+¡El problema del inventario ha sido **completamente solucionado**! 🎉
