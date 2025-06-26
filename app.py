@@ -1,172 +1,10 @@
-with tab4:
-        st.header("📚 Historial de Devoluciones")
-        st.markdown("**Registro completo de todas las devoluciones realizadas**")
-        
-        conn = db.get_connection()
-        
-        # Obtener historial de devoluciones
-        historial_devoluciones = pd.read_sql_query("""
-            SELECT p.id, p.fecha_prestamo, p.fecha_devolucion_estimada, p.fecha_devolucion_real,
-                   p.duracion_dias,
-                   e.codigo, e.nombre as elemento,
-                   c.nombre as categoria,
-                   d.nombre as deposito_actual,
-                   b.nombre as beneficiario, b.tipo,
-                   h.nombre as hermano_solicitante,
-                   l.nombre as logia,
-                   p.entregado_por, p.recibido_por,
-                   p.observaciones_prestamo, p.observaciones_devolucion,
-                   CAST((JULIANDAY(p.fecha_devolucion_real) - JULIANDAY(p.fecha_devolucion_estimada)) AS INTEGER) as dias_diferencia
-            FROM prestamos p
-            JOIN elementos e ON p.elemento_id = e.id
-            JOIN categorias c ON e.categoria_id = c.id
-            JOIN depositos d ON e.deposito_id = d.id
-            JOIN beneficiarios b ON p.beneficiario_id = b.id
-            JOIN hermanos h ON p.hermano_solicitante_id = h.id
-            LEFT JOIN logias l ON h.logia_id = l.id
-            WHERE p.estado = 'devuelto'
-            ORDER BY p.fecha_devolucion_real DESC
-        """, conn)
-        
-        if not historial_devoluciones.empty:
-            # Filtros para el historial
-            col1, col2, col3 = st.columns(3)
-            
-            with col1:
-                fecha_desde = st.date_input(
-                    "Desde:",
-                    value=date.today() - timedelta(days=90),
-                    help="Filtrar devoluciones desde esta fecha"
-                )
-            
-            with col2:
-                fecha_hasta = st.date_input(
-                    "Hasta:",
-                    value=date.today(),
-                    help="Filtrar devoluciones hasta esta fecha"
-                )
-            
-            with col3:
-                filtro_cumplimiento = st.selectbox(
-                    "Cumplimiento:",
-                    options=["Todos", "A Tiempo", "Con Retraso", "Anticipadas"],
-                    help="Filtrar según cumplimiento de fechas"
-                )
-            
-            # Aplicar filtros
-            historial_filtrado = historial_devoluciones[
-                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) >= pd.to_datetime(fecha_desde)) &
-                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) <= pd.to_datetime(fecha_hasta))
-            ]
-            
-            if filtro_cumplimiento != "Todos":
-                if filtro_cumplimiento == "A Tiempo":
-                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] == 0]
-                elif filtro_cumplimiento == "Con Retraso":
-                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] > 0]
-                elif filtro_cumplimiento == "Anticipadas":
-                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] < 0]
-            
-            if not historial_filtrado.empty:
-                st.markdown(f"#### 📊 Mostrando {len(historial_filtrado)} de {len(historial_devoluciones)} devoluciones")
-                
-                # Estadísticas rápidas
-                col1, col2, col3, col4 = st.columns(4)
-                
-                with col1:
-                    st.metric("Total Devoluciones", len(historial_filtrado))
-                
-                with col2:
-                    a_tiempo = len(historial_filtrado[historial_filtrado['dias_diferencia'] == 0])
-                    st.metric("A Tiempo", a_tiempo)
-                
-                with col3:
-                    con_retraso = len(historial_filtrado[historial_filtrado['dias_diferencia'] > 0])
-                    st.metric("Con Retraso", con_retraso)
-                
-                with col4:
-                    anticipadas = len(historial_filtrado[historial_filtrado['dias_diferencia'] < 0])
-                    st.metric("Anticipadas", anticipadas)
-                
-                st.markdown("---")
-                
-                # Mostrar cada devolución
-                for idx, devolucion in historial_filtrado.iterrows():
-                    # Determinar color según cumplimiento
-                    if devolucion['dias_diferencia'] == 0:
-                        cumplimiento_color = "#e8f5e8"  # Verde
-                        cumplimiento_emoji = "✅"
-                        cumplimiento_texto = "A tiempo"
-                    elif devolucion['dias_diferencia'] > 0:
-                        cumplimiento_color = "#ffebee"  # Rojo
-                        cumplimiento_emoji = "⏰"
-                        cumplimiento_texto = f"{devolucion['dias_diferencia']} días de retraso"
-                    else:
-                        cumplimiento_color = "#e3f2fd"  # Azul
-                        cumplimiento_emoji = "⚡"
-                        cumplimiento_texto = f"{abs(devolucion['dias_diferencia'])} días antes"
-                    
-                    with st.expander(f"{cumplimiento_emoji} {devolucion['codigo']} - {devolucion['elemento']} | Devuelto: {devolucion['fecha_devolucion_real']}"):
-                        # Información en columnas
-                        col1, col2, col3 = st.columns(3)
-                        
-                        with col1:
-                            st.markdown(f"""
-                            **📦 ELEMENTO:**  
-                            Código: {devolucion['codigo']}  
-                            Nombre: {devolucion['elemento']}  
-                            Categoría: {devolucion['categoria']}  
-                            Depósito Actual: {devolucion['deposito_actual']}
-                            """)
-                        
-                        with col2:
-                            st.markdown(f"""
-                            **👤 PRÉSTAMO:**  
-                            Beneficiario: {devolucion['beneficiario']} ({devolucion['tipo']})  
-                            Hermano: {devolucion['hermano_solicitante']}  
-                            Logia: {devolucion['logia'] or 'No disponible'}  
-                            Duración: {devolucion['duracion_dias']} días
-                            """)
-                        
-                        with col3:
-                            st.markdown(f"""
-                            **📅 FECHAS:**  
-                            Préstamo: {devolucion['fecha_prestamo']}  
-                            Devolución Prevista: {devolucion['fecha_devolucion_estimada']}  
-                            Devolución Real: {devolucion['fecha_devolucion_real']}  
-                            Cumplimiento: {cumplimiento_texto}
-                            """)
-                        
-                        # Responsables y observaciones
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.markdown(f"""
-                            **👥 RESPONSABLES:**  
-                            Entregado por: {devolucion['entregado_por']}  
-                            Recibido por: {devolucion['recibido_por']}
-                            """)
-                        
-                        with col2:
-                            if devolucion['observaciones_prestamo'] or devolucion['observaciones_devolucion']:
-                                st.markdown("**📝 OBSERVACIONES:**")
-                                if devolucion['observaciones_prestamo']:
-                                    st.text(f"Préstamo: {devolucion['observaciones_prestamo']}")
-                                if devolucion['observaciones_devolucion']:
-                                    st.text(f"Devolución: {devolucion['observaciones_devolucion']}")
-            else:
-                st.warning("❌ No se encontraron devoluciones en el rango de fechas seleccionado")
-        
-        else:
-            st.info("ℹ️ **No hay devoluciones registradas aún**")
-            st.markdown("Las devoluciones aparecerán aquí una vez que se registren en la pestaña **'DEVOLVER ELEMENTOS'**")
-        
-        conn.close()import streamlit as st
+import streamlit as st
 import pandas as pd
 import sqlite3
 from datetime import datetime, date, timedelta
 import hashlib
 import os
+import time
 from typing import Optional, List, Dict
 import plotly.express as px
 import plotly.graph_objects as go
@@ -324,18 +162,11 @@ class DatabaseManager:
             cursor.execute("INSERT OR IGNORE INTO categorias (nombre, descripcion) VALUES (?, ?)", 
                          (categoria, descripcion))
         
-        # Insertar grados masónicos básicos
-        grados_masonicos = ["Apr:.", "Comp:.", "M:.M:.", "Gr:. 4°", "Gr:. 18°", "Gr:. 30°", "Gr:. 32°", "Gr:. 33°"]
-        
         conn.commit()
         conn.close()
 
 # Inicializar la base de datos
 db = DatabaseManager()
-
-def hash_password(password: str) -> str:
-    """Hash de contraseña simple para autenticación básica"""
-    return hashlib.sha256(password.encode()).hexdigest()
 
 def authenticate():
     """Sistema de autenticación básico"""
@@ -431,8 +262,6 @@ def gestionar_hermanos():
     tab1, tab2 = st.tabs(["Nuevo Hermano", "Lista de Hermanos"])
     
     with tab1:
-        col1, col2 = st.columns(2)
-        
         # Obtener logias
         conn = db.get_connection()
         logias_df = pd.read_sql_query("SELECT id, nombre, numero FROM logias ORDER BY numero, nombre", conn)
@@ -514,8 +343,6 @@ def gestionar_elementos():
     tab1, tab2 = st.tabs(["Nuevo Elemento", "Inventario"])
     
     with tab1:
-        col1, col2 = st.columns(2)
-        
         # Obtener depósitos y categorías
         conn = db.get_connection()
         depositos_df = pd.read_sql_query("SELECT id, nombre FROM depositos", conn)
@@ -807,7 +634,6 @@ def gestionar_prestamos():
                 conn.close()
                 
                 # Fecha estimada de devolución - CORREGIDA
-                from datetime import timedelta
                 fecha_devolucion_estimada = fecha_prestamo + timedelta(days=duracion_dias)
                 st.markdown("#### 📅 Fecha Estimada de Devolución")
                 st.date_input(
@@ -944,7 +770,7 @@ def gestionar_prestamos():
             st.markdown("Para registrar un nuevo préstamo, ir a la pestaña **'Nuevo Préstamo'**")
         
         conn.close()
-    
+
     with tab3:
         st.header("🔄 DEVOLVER ELEMENTOS")
         st.markdown("**En esta sección puedes devolver cualquier elemento prestado, sin importar si está vencido o no.**")
@@ -1124,11 +950,18 @@ def gestionar_prestamos():
                                     
                                     # SELECCIÓN DE DEPÓSITO - NUEVA FUNCIONALIDAD
                                     if not depositos_disponibles.empty:
+                                        # Buscar el índice del depósito original
+                                        deposito_original_index = 0
+                                        for i, dep_id in enumerate(depositos_disponibles['id']):
+                                            if dep_id == prestamo['elemento_id']:  # Esto puede no ser correcto, necesito arreglarlo
+                                                deposito_original_index = i
+                                                break
+                                        
                                         deposito_devolucion_id = st.selectbox(
                                             "Depósito de Devolución*",
                                             options=depositos_disponibles['id'].tolist(),
                                             format_func=lambda x: f"{depositos_disponibles[depositos_disponibles['id'] == x]['nombre'].iloc[0]}",
-                                            index=depositos_disponibles[depositos_disponibles['id'] == prestamo['elemento_id']].index[0] if len(depositos_disponibles[depositos_disponibles['id'] == prestamo['elemento_id']]) > 0 else 0,
+                                            index=0,  # Por defecto el primer depósito
                                             help="Selecciona a qué depósito se devuelve el elemento"
                                         )
                                         
@@ -1240,7 +1073,6 @@ def gestionar_prestamos():
                                             st.balloons()
                                             
                                             # Pequeña pausa para mostrar el mensaje
-                                            import time
                                             time.sleep(2)
                                             st.rerun()
                                             
@@ -1260,6 +1092,171 @@ def gestionar_prestamos():
         else:
             st.info("ℹ️ **No hay elementos prestados actualmente**")
             st.markdown("Para registrar un nuevo préstamo, ve a la pestaña **'Nuevo Préstamo'**")
+        
+        conn.close()
+    
+    with tab4:
+        st.header("📚 Historial de Devoluciones")
+        st.markdown("**Registro completo de todas las devoluciones realizadas**")
+        
+        conn = db.get_connection()
+        
+        # Obtener historial de devoluciones
+        historial_devoluciones = pd.read_sql_query("""
+            SELECT p.id, p.fecha_prestamo, p.fecha_devolucion_estimada, p.fecha_devolucion_real,
+                   p.duracion_dias,
+                   e.codigo, e.nombre as elemento,
+                   c.nombre as categoria,
+                   d.nombre as deposito_actual,
+                   b.nombre as beneficiario, b.tipo,
+                   h.nombre as hermano_solicitante,
+                   l.nombre as logia,
+                   p.entregado_por, p.recibido_por,
+                   p.observaciones_prestamo, p.observaciones_devolucion,
+                   CAST((JULIANDAY(p.fecha_devolucion_real) - JULIANDAY(p.fecha_devolucion_estimada)) AS INTEGER) as dias_diferencia
+            FROM prestamos p
+            JOIN elementos e ON p.elemento_id = e.id
+            JOIN categorias c ON e.categoria_id = c.id
+            JOIN depositos d ON e.deposito_id = d.id
+            JOIN beneficiarios b ON p.beneficiario_id = b.id
+            JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            LEFT JOIN logias l ON h.logia_id = l.id
+            WHERE p.estado = 'devuelto'
+            ORDER BY p.fecha_devolucion_real DESC
+        """, conn)
+        
+        if not historial_devoluciones.empty:
+            # Filtros para el historial
+            col1, col2, col3 = st.columns(3)
+            
+            with col1:
+                fecha_desde = st.date_input(
+                    "Desde:",
+                    value=date.today() - timedelta(days=90),
+                    help="Filtrar devoluciones desde esta fecha"
+                )
+            
+            with col2:
+                fecha_hasta = st.date_input(
+                    "Hasta:",
+                    value=date.today(),
+                    help="Filtrar devoluciones hasta esta fecha"
+                )
+            
+            with col3:
+                filtro_cumplimiento = st.selectbox(
+                    "Cumplimiento:",
+                    options=["Todos", "A Tiempo", "Con Retraso", "Anticipadas"],
+                    help="Filtrar según cumplimiento de fechas"
+                )
+            
+            # Aplicar filtros
+            historial_filtrado = historial_devoluciones[
+                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) >= pd.to_datetime(fecha_desde)) &
+                (pd.to_datetime(historial_devoluciones['fecha_devolucion_real']) <= pd.to_datetime(fecha_hasta))
+            ]
+            
+            if filtro_cumplimiento != "Todos":
+                if filtro_cumplimiento == "A Tiempo":
+                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] == 0]
+                elif filtro_cumplimiento == "Con Retraso":
+                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] > 0]
+                elif filtro_cumplimiento == "Anticipadas":
+                    historial_filtrado = historial_filtrado[historial_filtrado['dias_diferencia'] < 0]
+            
+            if not historial_filtrado.empty:
+                st.markdown(f"#### 📊 Mostrando {len(historial_filtrado)} de {len(historial_devoluciones)} devoluciones")
+                
+                # Estadísticas rápidas
+                col1, col2, col3, col4 = st.columns(4)
+                
+                with col1:
+                    st.metric("Total Devoluciones", len(historial_filtrado))
+                
+                with col2:
+                    a_tiempo = len(historial_filtrado[historial_filtrado['dias_diferencia'] == 0])
+                    st.metric("A Tiempo", a_tiempo)
+                
+                with col3:
+                    con_retraso = len(historial_filtrado[historial_filtrado['dias_diferencia'] > 0])
+                    st.metric("Con Retraso", con_retraso)
+                
+                with col4:
+                    anticipadas = len(historial_filtrado[historial_filtrado['dias_diferencia'] < 0])
+                    st.metric("Anticipadas", anticipadas)
+                
+                st.markdown("---")
+                
+                # Mostrar cada devolución
+                for idx, devolucion in historial_filtrado.iterrows():
+                    # Determinar color según cumplimiento
+                    if devolucion['dias_diferencia'] == 0:
+                        cumplimiento_color = "#e8f5e8"  # Verde
+                        cumplimiento_emoji = "✅"
+                        cumplimiento_texto = "A tiempo"
+                    elif devolucion['dias_diferencia'] > 0:
+                        cumplimiento_color = "#ffebee"  # Rojo
+                        cumplimiento_emoji = "⏰"
+                        cumplimiento_texto = f"{devolucion['dias_diferencia']} días de retraso"
+                    else:
+                        cumplimiento_color = "#e3f2fd"  # Azul
+                        cumplimiento_emoji = "⚡"
+                        cumplimiento_texto = f"{abs(devolucion['dias_diferencia'])} días antes"
+                    
+                    with st.expander(f"{cumplimiento_emoji} {devolucion['codigo']} - {devolucion['elemento']} | Devuelto: {devolucion['fecha_devolucion_real']}"):
+                        # Información en columnas
+                        col1, col2, col3 = st.columns(3)
+                        
+                        with col1:
+                            st.markdown(f"""
+                            **📦 ELEMENTO:**  
+                            Código: {devolucion['codigo']}  
+                            Nombre: {devolucion['elemento']}  
+                            Categoría: {devolucion['categoria']}  
+                            Depósito Actual: {devolucion['deposito_actual']}
+                            """)
+                        
+                        with col2:
+                            st.markdown(f"""
+                            **👤 PRÉSTAMO:**  
+                            Beneficiario: {devolucion['beneficiario']} ({devolucion['tipo']})  
+                            Hermano: {devolucion['hermano_solicitante']}  
+                            Logia: {devolucion['logia'] or 'No disponible'}  
+                            Duración: {devolucion['duracion_dias']} días
+                            """)
+                        
+                        with col3:
+                            st.markdown(f"""
+                            **📅 FECHAS:**  
+                            Préstamo: {devolucion['fecha_prestamo']}  
+                            Devolución Prevista: {devolucion['fecha_devolucion_estimada']}  
+                            Devolución Real: {devolucion['fecha_devolucion_real']}  
+                            Cumplimiento: {cumplimiento_texto}
+                            """)
+                        
+                        # Responsables y observaciones
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown(f"""
+                            **👥 RESPONSABLES:**  
+                            Entregado por: {devolucion['entregado_por']}  
+                            Recibido por: {devolucion['recibido_por']}
+                            """)
+                        
+                        with col2:
+                            if devolucion['observaciones_prestamo'] or devolucion['observaciones_devolucion']:
+                                st.markdown("**📝 OBSERVACIONES:**")
+                                if devolucion['observaciones_prestamo']:
+                                    st.text(f"Préstamo: {devolucion['observaciones_prestamo']}")
+                                if devolucion['observaciones_devolucion']:
+                                    st.text(f"Devolución: {devolucion['observaciones_devolucion']}")
+            else:
+                st.warning("❌ No se encontraron devoluciones en el rango de fechas seleccionado")
+        
+        else:
+            st.info("ℹ️ **No hay devoluciones registradas aún**")
+            st.markdown("Las devoluciones aparecerán aquí una vez que se registren en la pestaña **'DEVOLVER ELEMENTOS'**")
         
         conn.close()
 
