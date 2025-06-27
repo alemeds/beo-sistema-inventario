@@ -228,9 +228,9 @@ def authenticate():
                 else:
                     st.error("Credenciales incorrectas")
         
-        st.info("👤 Usuario: beo_admin  | 🔑 Contraseña: beo2025")
+        st.info("👤 Usuario: beo_admin | 🔑 Contraseña: beo2025")
         st.markdown("---")
-        st.caption("Sistema de Gestión del Banco de Elementos Ortopédicos")
+        st.caption("Sistema de Gestión del Banco de Elementos Ortopédicos v2.5")
         return False
     
     return True
@@ -253,6 +253,7 @@ def mostrar_manual_usuario():
             "🔄 Devolución de Elementos",
             "🔧 Cambio de Estados",
             "📊 Dashboard y Reportes",
+            "🗄️ Estructura de Datos",
             "❓ Preguntas Frecuentes"
         ]
     )
@@ -436,48 +437,111 @@ def mostrar_manual_usuario():
         ### ¿Para qué sirve?
         Gestionar el ciclo completo de préstamos de elementos ortopédicos según el formulario oficial BEO.
         
-        ### 📝 Cómo Registrar un Nuevo Préstamo
+        ### 🔄 Diagrama de Flujo del Proceso de Préstamo
+        """)
         
-        1. **Ir a:** Menú Principal → Formulario de Préstamo → "Nuevo Préstamo"
+        # Diagrama de flujo usando Mermaid
+        st.markdown("#### 📊 Flujo Completo del Proceso")
         
-        2. **Información General:**
-           - **Fecha** del préstamo
-           - **Duración:** Especificar en días o meses
-           - El sistema calcula automáticamente la fecha de devolución
+        with st.container():
+            st.markdown("""
+            ```mermaid
+            flowchart TD
+                A[🏛️ Registrar Logia] --> B[👨‍🤝‍👨 Registrar Hermano]
+                B --> C[🏢 Crear Depósito]
+                C --> D[🦽 Registrar Elemento]
+                D --> E{🤔 ¿Elemento<br/>Disponible?}
+                E -->|No| F[⚠️ Verificar Estado<br/>del Elemento]
+                F --> G[🔧 Cambiar Estado<br/>a Disponible]
+                G --> E
+                E -->|Sí| H[📋 Llenar Formulario<br/>de Préstamo]
+                H --> I[👤 Seleccionar<br/>Hermano Solicitante]
+                I --> J{🎯 ¿Tipo de<br/>Beneficiario?}
+                J -->|Hermano| K[👨‍🤝‍👨 Seleccionar<br/>Hermano Beneficiario]
+                J -->|Familiar| L[👨‍👩‍👧‍👦 Registrar Datos<br/>del Familiar]
+                K --> M[📍 Completar Dirección<br/>de Entrega]
+                L --> M
+                M --> N[🦽 Seleccionar<br/>Elemento]
+                N --> O[⏱️ Definir Duración<br/>del Préstamo]
+                O --> P[📝 Agregar<br/>Observaciones]
+                P --> Q[✅ Registrar<br/>Préstamo BEO]
+                Q --> R[🔄 Elemento Cambia<br/>a Estado 'Prestado']
+                R --> S[📊 Aparece en<br/>Dashboard Activos]
+                S --> T[📅 Monitoreo<br/>de Vencimiento]
+                T --> U{🕐 ¿Llegó Fecha<br/>de Devolución?}
+                U -->|No| V[⏰ Continuar<br/>Monitoreo]
+                V --> T
+                U -->|Sí| W[🚨 Alerta de<br/>Vencimiento]
+                W --> X[📞 Contactar<br/>Beneficiario]
+                X --> Y[🔄 Registrar<br/>Devolución]
+                Y --> Z[🏢 Elegir Depósito<br/>de Devolución]
+                Z --> AA[📊 Evaluar Estado<br/>del Elemento]
+                AA --> BB{🔍 ¿Estado del<br/>Elemento?}
+                BB -->|Bueno/Regular| CC[✅ Disponible]
+                BB -->|Dañado/Mantenimiento| DD[🔧 Mantenimiento]
+                CC --> EE[📚 Registro en<br/>Historial]
+                DD --> EE
+                EE --> FF[🎉 Proceso<br/>Completado]
+                
+                style A fill:#e1f5fe
+                style FF fill:#c8e6c9
+                style W fill:#ffecb3
+                style F fill:#ffcdd2
+            ```
+            """)
         
-        3. **Hermano Solicitante:**
-           - **Seleccionar** hermano de la lista
-           - Se muestra automáticamente: logia, grado, hospitalario, venerable
+        st.markdown("""
+        ### 📝 Pasos Detallados para un Nuevo Préstamo
         
-        4. **Beneficiario del Préstamo:**
-           - **Tipo:** Hermano o Familiar
-           - **Si es Hermano:** Seleccionar de la lista
-           - **Si es Familiar:** 
-             - Especificar parentesco (Madre, Padre, Esposa/o, etc.)
-             - Indicar de qué hermano es familiar
-             - Completar nombre y teléfono
+        #### 🏗️ **Configuración Inicial (Solo una vez)**
+        1. **Registrar la Logia** en "Gestión de Logias"
+        2. **Crear Depósitos** en "Gestión de Depósitos" 
+        3. **Cargar Elementos** en "Gestión de Elementos"
         
-        5. **Información del Elemento:**
-           - **Dirección de entrega**
-           - **Elemento a prestar** (solo aparecen disponibles)
-           - **Observaciones del préstamo**
-           - **Autorizado por**
-           - **Entregado por**
+        #### 👨‍🤝‍👨 **Registro del Hermano (Si es nuevo)**
+        4. **Ir a:** Gestión de Hermanos → "Nuevo Hermano"
+        5. **Completar datos:** Nombre, teléfono, logia, grado
+        6. **Guardar** el hermano en el sistema
         
-        6. **Hacer clic en:** "📋 Registrar Préstamo BEO"
+        #### 📋 **Proceso de Préstamo**
+        7. **Ir a:** Formulario de Préstamo → "Nuevo Préstamo"
+        8. **Información General:**
+           - Fecha del préstamo
+           - Duración (días o meses)
         
-        ### 📊 Monitorear Préstamos Activos
-        - **Ir a:** Formulario de Préstamo → "Préstamos Activos"
-        - **Estados visuales:**
-          - 🟢 **Vigente** - Dentro del plazo
-          - 🟡 **Por Vencer** - Próximo a vencer (7 días)
-          - 🔴 **Vencido** - Pasado la fecha límite
+        9. **Hermano Solicitante:**
+           - Seleccionar de la lista de hermanos activos
+           - Verificar datos de logia y hospitalario
         
-        ### 💡 Consejos
-        - Verificar que el elemento esté "disponible"
-        - La duración típica es 90 días o 3 meses
-        - Completar siempre las observaciones importantes
-        - El hermano solicitante puede ser diferente al beneficiario
+        10. **Beneficiario:**
+            - **Si es Hermano:** Seleccionar de la lista
+            - **Si es Familiar:** Completar parentesco y datos
+        
+        11. **Información del Elemento:**
+            - Dirección de entrega completa
+            - Seleccionar elemento disponible
+            - Observaciones importantes
+            - Autorizado por / Entregado por
+        
+        12. **Confirmar:** "📋 Registrar Préstamo BEO"
+        
+        #### 📊 **Seguimiento**
+        13. **Monitorear** en Dashboard → Alertas de vencimiento
+        14. **Contactar** cuando aparezcan alertas de "Por Vencer"
+        15. **Registrar devolución** cuando corresponda
+        
+        ### 💡 Consejos Importantes
+        - ✅ **Siempre verificar** que el elemento esté "disponible"
+        - 📞 **Completar teléfonos** para poder contactar
+        - 📍 **Dirección detallada** para ubicar el elemento
+        - ⏰ **Duración típica:** 90 días (3 meses)
+        - 📝 **Observaciones claras** ayudan al seguimiento
+        
+        ### ⚠️ Casos Especiales
+        - **Elemento no disponible:** Usar "🔧 Cambiar Estado"
+        - **Familiar sin hermano:** Primero registrar el hermano responsable
+        - **Devolución anticipada:** Usar "🔄 Devolución" en cualquier momento
+        - **Elemento dañado:** Marcar estado al momento de devolución
         """)
     
     elif seccion == "🔄 Devolución de Elementos":
@@ -645,6 +709,212 @@ def mostrar_manual_usuario():
         - **Monitorear** el uso por logia para planificación
         - **Identificar** necesidades de más elementos en ciertas categorías
         - **Evaluar** la efectividad del programa BEO
+        """)
+    
+    elif seccion == "🗄️ Estructura de Datos":
+        st.markdown("""
+        ## 🗄️ Estructura de Datos del Sistema BEO
+        
+        ### ¿Para qué sirve esta información?
+        Entender cómo se relacionan los datos en el sistema BEO te ayudará a:
+        - **Usar mejor** el sistema conociendo las dependencias
+        - **Solucionar problemas** cuando algo no funciona como esperado
+        - **Planificar** la carga de datos de manera eficiente
+        
+        ### 🏗️ Diagrama de Entidad Relación
+        
+        El sistema BEO organiza los datos de la siguiente manera:
+        """)
+        
+        # Diagrama ERD usando Mermaid
+        with st.container():
+            st.markdown("""
+            ```mermaid
+            erDiagram
+                LOGIAS {
+                    int id PK
+                    string nombre UK
+                    string venerable_maestro
+                    string hospitalario
+                    string telefono_hospitalario
+                    boolean activo
+                }
+                
+                HERMANOS {
+                    int id PK
+                    string nombre
+                    string telefono
+                    int logia_id FK
+                    string grado
+                    string direccion
+                    boolean activo
+                }
+                
+                DEPOSITOS {
+                    int id PK
+                    string nombre UK
+                    string direccion
+                    string responsable
+                    boolean activo
+                }
+                
+                CATEGORIAS {
+                    int id PK
+                    string nombre UK
+                    string descripcion
+                }
+                
+                ELEMENTOS {
+                    int id PK
+                    string codigo UK
+                    string nombre
+                    int categoria_id FK
+                    int deposito_id FK
+                    string estado
+                    boolean activo
+                }
+                
+                BENEFICIARIOS {
+                    int id PK
+                    string tipo
+                    int hermano_id FK
+                    int hermano_responsable_id FK
+                    string nombre
+                    string direccion
+                }
+                
+                PRESTAMOS {
+                    int id PK
+                    int elemento_id FK
+                    int beneficiario_id FK
+                    int hermano_solicitante_id FK
+                    date fecha_prestamo
+                    date fecha_devolucion_estimada
+                    string estado
+                }
+                
+                %% Relaciones principales
+                LOGIAS ||--o{ HERMANOS : "pertenece_a"
+                HERMANOS ||--o{ BENEFICIARIOS : "responsable_de"
+                HERMANOS ||--o{ PRESTAMOS : "solicita"
+                DEPOSITOS ||--o{ ELEMENTOS : "almacena"
+                CATEGORIAS ||--o{ ELEMENTOS : "clasifica"
+                ELEMENTOS ||--o{ PRESTAMOS : "prestado_en"
+                BENEFICIARIOS ||--o{ PRESTAMOS : "recibe"
+            ```
+            """)
+        
+        st.markdown("""
+        ### 📋 Explicación de las Tablas
+        
+        #### 🏛️ **LOGIAS** (Organizaciones Masónicas)
+        - **Propósito**: Registrar las logias masónicas que participan en el BEO
+        - **Datos clave**: Nombre, Venerable Maestro, Hospitalario
+        - **Relación**: Una logia puede tener muchos hermanos
+        
+        #### 👨‍🤝‍👨 **HERMANOS** (Hermanos Masones)
+        - **Propósito**: Registro de hermanos masones activos
+        - **Datos clave**: Nombre, teléfono, grado masónico, logia
+        - **Relación**: Pertenece a una logia, puede ser beneficiario o responsable
+        
+        #### 🏢 **DEPÓSITOS** (Ubicaciones de Almacenamiento)
+        - **Propósito**: Lugares donde se guardan los elementos ortopédicos
+        - **Datos clave**: Nombre, dirección, responsable
+        - **Relación**: Un depósito almacena muchos elementos
+        
+        #### 📦 **CATEGORÍAS** (Tipos de Elementos)
+        - **Propósito**: Clasificar los elementos ortopédicos
+        - **Ejemplos**: Sillas de ruedas, bastones, muletas, andadores
+        - **Relación**: Una categoría agrupa muchos elementos
+        
+        #### 🦽 **ELEMENTOS** (Inventario Ortopédico)
+        - **Propósito**: Registro individual de cada elemento ortopédico
+        - **Datos clave**: Código único, nombre, estado, ubicación
+        - **Estados**: Disponible, Prestado, Mantenimiento
+        - **Relación**: Pertenece a una categoría y está en un depósito
+        
+        #### 🎯 **BENEFICIARIOS** (Quién Recibe el Préstamo)
+        - **Propósito**: Registro de quien recibe elementos (hermanos o familiares)
+        - **Tipos**: Hermano (directo) o Familiar (con hermano responsable)
+        - **Datos clave**: Nombre, tipo, dirección, hermano responsable
+        
+        #### 📋 **PRÉSTAMOS** (Ciclo de Préstamos)
+        - **Propósito**: Registro completo del ciclo de préstamo-devolución
+        - **Datos clave**: Fechas, duración, estado, observaciones
+        - **Estados**: Activo, Devuelto, Vencido
+        
+        ### 🔗 Relaciones Importantes
+        
+        #### **¿Por qué es importante el orden?**
+        1. **Primero las Logias** → Sin logia no puedes registrar hermanos
+        2. **Luego los Hermanos** → Sin hermanos no puedes hacer préstamos
+        3. **Después Depósitos y Categorías** → Para clasificar elementos
+        4. **Elementos** → Necesitan depósito y categoría
+        5. **Finalmente Préstamos** → Necesitan hermano, elemento y beneficiario
+        
+        #### **Flujo de Dependencias:**
+        ```
+        LOGIA → HERMANO → BENEFICIARIO → PRÉSTAMO
+                    ↓           ↑
+                SOLICITA    RECIBE
+                    ↓           ↑
+        DEPÓSITO → ELEMENTO ————————→ PRÉSTAMO
+        CATEGORÍA → ELEMENTO
+        ```
+        
+        ### 💡 Consejos Prácticos
+        
+        #### **✅ Secuencia Recomendada de Carga de Datos:**
+        1. 🏛️ Crear las **Logias** con hospitalarios
+        2. 🏢 Definir **Depósitos** (al menos uno)
+        3. 👨‍🤝‍👨 Registrar **Hermanos** (vincular a logias)
+        4. 🦽 Cargar **Elementos** (con códigos únicos)
+        5. 📋 Procesar **Préstamos** normalmente
+        
+        #### **❌ Errores Comunes y Soluciones:**
+        - **"Hermano no encontrado"** → Verificar que esté registrado y activo
+        - **"Elemento no disponible"** → Verificar estado en Gestión de Elementos
+        - **"Error de integridad"** → Seguir el orden de dependencias
+        
+        #### **🔍 Para Verificar Problemas:**
+        - Activar **Debug Info** en el sidebar para ver conteos de registros
+        - Verificar **Foreign Keys** están habilitadas (debería mostrar "ON")
+        - Revisar que los **IDs** de las relaciones sean correctos
+        
+        ### 🛡️ Integridad de Datos
+        
+        #### **Protecciones Automáticas:**
+        - **Códigos únicos** → No puedes duplicar códigos de elementos
+        - **Foreign Keys** → No puedes referenciar registros inexistentes
+        - **Estados válidos** → Solo permite estados predefinidos
+        - **Auditoría** → Todos los cambios quedan registrados
+        
+        #### **Validaciones del Sistema:**
+        - Un elemento **prestado** no puede prestarse otra vez
+        - Un hermano **inactivo** no aparece en listas de préstamos
+        - Un depósito con elementos **no se puede eliminar**
+        - Los **vencimientos** se calculan automáticamente
+        
+        ### 📊 Consultas Útiles Que Hace el Sistema
+        
+        #### **Dashboard:**
+        - Contar elementos por estado y categoría
+        - Listar préstamos activos con alertas de vencimiento
+        - Ubicaciones actuales de elementos prestados
+        
+        #### **Historiales:**
+        - Todos los préstamos de un hermano específico
+        - Por qué manos pasó cada elemento
+        - Estadísticas de cumplimiento por logia
+        
+        #### **Reportes:**
+        - Elementos disponibles por depósito
+        - Cumplimiento de devoluciones por hermano
+        - Uso del BEO por logia
+        
+        ---
+        
+        💡 **Esta estructura garantiza que el sistema BEO mantenga la integridad de los datos y proporcione información precisa para la gestión del banco de elementos ortopédicos.**
         """)
     
     elif seccion == "❓ Preguntas Frecuentes":
@@ -1629,7 +1899,7 @@ def gestionar_prestamos():
                             format_func=lambda x: f"{hermanos_df.iloc[x]['nombre']} - {hermanos_df.iloc[x]['logia']} ({hermanos_df.iloc[x]['grado']})"
                         )
                         hermano_seleccionado = hermanos_df.iloc[hermano_idx]
-                        hermano_solicitante_id = int(hermano_seleccionado['id'])  # Asegurar que sea int
+                        hermano_solicitante_id = int(hermano_seleccionado['id'])
                         
                         # Mostrar información del hermano
                         st.markdown("##### 📋 Información del Hermano Solicitante")
@@ -1672,7 +1942,7 @@ def gestionar_prestamos():
                             format_func=lambda x: hermanos_df.iloc[x]['nombre']
                         )
                         hermano_beneficiario_seleccionado = hermanos_df.iloc[hermano_beneficiario_idx]
-                        hermano_beneficiario_id = int(hermano_beneficiario_seleccionado['id'])  # Asegurar int
+                        hermano_beneficiario_id = int(hermano_beneficiario_seleccionado['id'])
                         beneficiario_nombre = hermano_beneficiario_seleccionado['nombre']
                         beneficiario_telefono = hermano_beneficiario_seleccionado['telefono']
                         logia_beneficiario = hermano_beneficiario_seleccionado['logia']
@@ -1696,7 +1966,7 @@ def gestionar_prestamos():
                             format_func=lambda x: hermanos_df.iloc[x]['nombre'],
                             key="hermano_responsable"
                         )
-                        hermano_responsable_id = int(hermanos_df.iloc[hermano_resp_idx]['id'])  # Asegurar int
+                        hermano_responsable_id = int(hermanos_df.iloc[hermano_resp_idx]['id'])
                         logia_beneficiario = hermanos_df.iloc[hermano_resp_idx]['logia']
                         st.info(f"Hermano responsable: {hermanos_df.iloc[hermano_resp_idx]['nombre']}")
                     else:
@@ -1731,7 +2001,7 @@ def gestionar_prestamos():
                             options=elementos_disponibles['id'].tolist(),
                             format_func=lambda x: f"{elementos_disponibles[elementos_disponibles['id'] == x]['codigo'].iloc[0]} - {elementos_disponibles[elementos_disponibles['id'] == x]['nombre'].iloc[0]} ({elementos_disponibles[elementos_disponibles['id'] == x]['deposito'].iloc[0]})"
                         )
-                        elemento_id = int(elemento_selected)  # Asegurar que sea int
+                        elemento_id = int(elemento_selected)
                     else:
                         st.error("No hay elementos disponibles para préstamo")
                         elemento_id = None
@@ -1790,63 +2060,29 @@ def gestionar_prestamos():
                         conn = db.get_connection()
                         cursor = conn.cursor()
                         
-                        # Debug: Verificar hermano solicitante con más detalle
-                        st.write(f"🔍 Debug: Buscando hermano solicitante con ID: {hermano_solicitante_id} (tipo: {type(hermano_solicitante_id)})")
+                        # Verificar hermano solicitante
                         cursor.execute("SELECT id, nombre, activo FROM hermanos WHERE id = ?", (hermano_solicitante_id,))
                         hermano_encontrado = cursor.fetchone()
                         
                         if not hermano_encontrado:
                             st.error("❌ Error: Hermano solicitante no encontrado en la base de datos")
-                            
-                            # Mostrar todos los hermanos disponibles para debug
-                            st.write("🔍 Debug: Hermanos en base de datos:")
-                            cursor.execute("SELECT id, nombre, activo FROM hermanos ORDER BY id")
-                            todos_hermanos = cursor.fetchall()
-                            for h in todos_hermanos:
-                                st.write(f"  - ID: {h[0]} (tipo: {type(h[0])}), Nombre: {h[1]}, Activo: {h[2]}")
-                            
-                            # Mostrar el ID que se está buscando
-                            st.write(f"🔍 Debug: Se busca el ID: {hermano_solicitante_id} (tipo: {type(hermano_solicitante_id)})")
-                            
                             conn.close()
                             return
-                        elif hermano_encontrado[2] != 1:  # Si no está activo
+                        elif hermano_encontrado[2] != 1:
                             st.error("❌ Error: Hermano solicitante no está activo")
                             conn.close()
                             return
                         
-                        st.success(f"✅ Hermano solicitante verificado: {hermano_encontrado[1]}")
-                        
                         # Verificar elemento
-                        st.write(f"🔍 Debug: Verificando elemento con ID: {elemento_id} (tipo: {type(elemento_id)})")
                         cursor.execute("SELECT id, codigo, nombre, estado FROM elementos WHERE id = ? AND estado = 'disponible' AND activo = 1", (elemento_id,))
                         elemento_encontrado = cursor.fetchone()
                         if not elemento_encontrado:
-                            st.error("❌ Error: Elemento no disponible o no encontrado")
-                            
-                            # Debug de elementos
-                            cursor.execute("SELECT id, codigo, nombre, estado, activo FROM elementos ORDER BY id")
-                            todos_elementos = cursor.fetchall()
-                            st.write("🔍 Debug: Elementos en base de datos:")
-                            for e in todos_elementos:
-                                st.write(f"  - ID: {e[0]}, Código: {e[1]}, Estado: {e[3]}, Activo: {e[4]}")
-                            
-                            conn.close()
-                            return
-                        
-                        st.success(f"✅ Elemento verificado: {elemento_encontrado[1]} ({elemento_encontrado[2]})")
-                        
-                        # Verificar elemento
-                        cursor.execute("SELECT id FROM elementos WHERE id = ? AND estado = 'disponible' AND activo = 1", (elemento_id,))
-                        if not cursor.fetchone():
                             st.error("❌ Error: Elemento no disponible o no encontrado")
                             conn.close()
                             return
                         
                         # Crear beneficiario
                         if tipo_beneficiario == "Hermano":
-                            # Verificar hermano beneficiario
-                            st.write(f"🔍 Debug: Verificando hermano beneficiario con ID: {hermano_beneficiario_id}")
                             cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_beneficiario_id,))
                             if not cursor.fetchone():
                                 st.error("❌ Error: Hermano beneficiario no encontrado en la base de datos")
@@ -1860,8 +2096,6 @@ def gestionar_prestamos():
                             """, (tipo_beneficiario.lower(), hermano_beneficiario_id, None,
                                  None, beneficiario_nombre, beneficiario_telefono or "", direccion_entrega))
                         else:  # Familiar
-                            # Verificar hermano responsable
-                            st.write(f"🔍 Debug: Verificando hermano responsable con ID: {hermano_responsable_id}")
                             cursor.execute("SELECT id FROM hermanos WHERE id = ? AND activo = 1", (hermano_responsable_id,))
                             if not cursor.fetchone():
                                 st.error("❌ Error: Hermano responsable no encontrado en la base de datos")
@@ -1907,23 +2141,6 @@ def gestionar_prestamos():
                         
                     except sqlite3.IntegrityError as e:
                         st.error(f"❌ Error de integridad de base de datos: {e}")
-                        
-                        # Debug information
-                        with st.expander("🔍 Información de Debug"):
-                            st.write("**IDs utilizados:**")
-                            st.write(f"- Hermano solicitante ID: {hermano_solicitante_id}")
-                            st.write(f"- Elemento ID: {elemento_id}")
-                            if tipo_beneficiario == "Hermano":
-                                st.write(f"- Hermano beneficiario ID: {hermano_beneficiario_id}")
-                            else:
-                                st.write(f"- Hermano responsable ID: {hermano_responsable_id}")
-                            
-                            st.write("**Datos del formulario:**")
-                            st.write(f"- Tipo beneficiario: {tipo_beneficiario}")
-                            st.write(f"- Nombre beneficiario: {beneficiario_nombre}")
-                            st.write(f"- Fecha préstamo: {fecha_prestamo}")
-                            st.write(f"- Duración días: {duracion_dias}")
-                        
                         st.info("💡 Verifica que todos los registros (hermanos, elementos, logias) estén correctamente creados antes de crear el préstamo")
                         if 'conn' in locals():
                             conn.close()
@@ -2522,39 +2739,43 @@ def mostrar_dashboard():
         st.error(f"Error al cargar dashboard: {e}")
 
 def debug_foreign_keys():
-    """Función de debug para verificar el estado de las foreign keys"""
-    try:
-        conn = db.get_connection()
-        cursor = conn.cursor()
-        
-        st.sidebar.markdown("---")
-        st.sidebar.subheader("🔍 Debug Info")
-        
-        # Contar registros en cada tabla
-        tables = ['logias', 'hermanos', 'elementos', 'depositos', 'categorias', 'beneficiarios', 'prestamos']
-        for table in tables:
-            count = cursor.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-            st.sidebar.caption(f"{table}: {count} registros")
-        
-        # Verificar foreign keys habilitadas
-        fk_status = cursor.execute("PRAGMA foreign_keys").fetchone()[0]
-        st.sidebar.caption(f"Foreign Keys: {'ON' if fk_status else 'OFF'}")
-        
-        # Mostrar hermanos específicos
-        st.sidebar.markdown("**👨‍🤝‍👨 Hermanos activos:**")
-        hermanos = cursor.execute("SELECT id, nombre FROM hermanos WHERE activo = 1 ORDER BY nombre LIMIT 5").fetchall()
-        for hermano in hermanos:
-            st.sidebar.caption(f"ID: {hermano[0]} - {hermano[1]}")
-        
-        # Mostrar elementos disponibles
-        st.sidebar.markdown("**🦽 Elementos disponibles:**")
-        elementos = cursor.execute("SELECT id, codigo, nombre FROM elementos WHERE estado = 'disponible' AND activo = 1 ORDER BY codigo LIMIT 5").fetchall()
-        for elemento in elementos:
-            st.sidebar.caption(f"ID: {elemento[0]} - {elemento[1]}")
-        
-        conn.close()
-    except Exception as e:
-        st.sidebar.error(f"Debug error: {e}")
+    """Función de debug para verificar el estado de las foreign keys - OPCIONAL"""
+    # Checkbox para activar/desactivar debug info
+    show_debug = st.sidebar.checkbox("🔍 Mostrar Debug Info", value=False, help="Activar para ver información técnica del sistema")
+    
+    if show_debug:
+        try:
+            conn = db.get_connection()
+            cursor = conn.cursor()
+            
+            st.sidebar.markdown("---")
+            st.sidebar.subheader("🔍 Debug Info")
+            
+            # Contar registros en cada tabla
+            tables = ['logias', 'hermanos', 'elementos', 'depositos', 'categorias', 'beneficiarios', 'prestamos']
+            for table in tables:
+                count = cursor.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                st.sidebar.caption(f"{table}: {count} registros")
+            
+            # Verificar foreign keys habilitadas
+            fk_status = cursor.execute("PRAGMA foreign_keys").fetchone()[0]
+            st.sidebar.caption(f"Foreign Keys: {'ON' if fk_status else 'OFF'}")
+            
+            # Mostrar hermanos específicos
+            st.sidebar.markdown("**👨‍🤝‍👨 Hermanos activos:**")
+            hermanos = cursor.execute("SELECT id, nombre FROM hermanos WHERE activo = 1 ORDER BY nombre LIMIT 5").fetchall()
+            for hermano in hermanos:
+                st.sidebar.caption(f"ID: {hermano[0]} - {hermano[1]}")
+            
+            # Mostrar elementos disponibles
+            st.sidebar.markdown("**🦽 Elementos disponibles:**")
+            elementos = cursor.execute("SELECT id, codigo, nombre FROM elementos WHERE estado = 'disponible' AND activo = 1 ORDER BY codigo LIMIT 5").fetchall()
+            for elemento in elementos:
+                st.sidebar.caption(f"ID: {elemento[0]} - {elemento[1]}")
+            
+            conn.close()
+        except Exception as e:
+            st.sidebar.error(f"Debug error: {e}")
 
 def main():
     """Función principal de la aplicación"""
@@ -2564,7 +2785,7 @@ def main():
     col1, col2, col3 = st.columns([1, 3, 1])
     with col2:
         st.title("🏛️ BEO - Banco de Elementos Ortopédicos")
-        st.caption("Sistema de Gestión Integral - Versión Corregida")
+        st.caption("Sistema de Gestión Integral - Versión 2.5 Final")
     
     st.sidebar.title("🏛️ BEO Sistema")
     st.sidebar.markdown("---")
@@ -2585,11 +2806,11 @@ def main():
         format_func=lambda x: f"{menu_options[x]} {x}"
     )
     
-    # Añadir debug info
+    # Añadir debug info opcional
     debug_foreign_keys()
     
     st.sidebar.markdown("---")
-    st.sidebar.caption("Banco de Elementos Ortopédicos v2.1")
+    st.sidebar.caption("Banco de Elementos Ortopédicos v2.5")
     if st.sidebar.button("🚪 Cerrar Sesión"):
         st.session_state.authenticated = False
         st.rerun()
