@@ -228,7 +228,7 @@ def authenticate():
                 else:
                     st.error("Credenciales incorrectas")
         
-        st.info("👤 Usuario: beo_admin Version 4 | 🔑 Contraseña: beo2025")
+        st.info("👤 Usuario: beo_admin  | 🔑 Contraseña: beo2025")
         st.markdown("---")
         st.caption("Sistema de Gestión del Banco de Elementos Ortopédicos")
         return False
