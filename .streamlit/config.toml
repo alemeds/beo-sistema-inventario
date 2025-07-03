@@ -1,13 +1,11 @@
 # Configuración para BEO - Banco de Elementos Ortopédicos
 # Este archivo personaliza la apariencia de tu app Streamlit
-
 [theme]
 # 🎨 COLORES PERSONALIZADOS (inspirados en masonería)
 primaryColor = "#1f4e79"              # Azul masónico para botones y enlaces
 backgroundColor = "#ffffff"            # Fondo blanco principal
 secondaryBackgroundColor = "#f8f9fa"   # Fondo gris claro para sidebars
 textColor = "#262730"                  # Color del texto principal
-
 # 🎨 ALTERNATIVAS DE COLORES (descomenta la que prefieras):
 # primaryColor = "#B8860B"             # Dorado masónico
 # primaryColor = "#4CAF50"             # Verde institucional
@@ -32,8 +30,21 @@ showErrorDetails = false               # Ocultar detalles técnicos de errores e
 # ⚙️ CONFIGURACIONES GENERALES
 developmentMode = false                # Modo producción (menos logs)
 logLevel = "info"                     # Nivel de logs: debug, info, warning, error
-
 # 📱 Para apps móviles
+
 [theme.base]
 # Puedes usar "light" o "dark" como base
 # base = "dark"  # Descomenta para tema oscuro
+
+# 🗄️ CONFIGURACIÓN DE BASE DE DATOS POSTGRESQL (RENDER)
+[database]
+host = "dpg-d1jc6pidbo4c739j3mv0-a.oregon-postgres.render.com"
+port = "5432"
+database = "beo_inventario"
+username = "beo_user"
+password = "u69oyuRLUPaw0aOFdJd7MgTwuNBW4MNA"
+url = "postgresql://beo_user:u69oyuRLUPaw0aOFdJd7MgTwuNBW4MNA@dpg-d1jc6pidbo4c739j3mv0-a.oregon-postgres.render.com/beo_inventario"
+
+[general]
+app_name = "BEO - Banco de Elementos Ortopédicos"
+version = "2.5 - PostgreSQL"
