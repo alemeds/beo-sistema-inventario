@@ -23,6 +23,9 @@ wheels/
 # Streamlit
 .streamlit/secrets.toml
 
+# Scripts con credenciales (usar versión _seguro.py)
+cargar_logias.py
+
 # IDEs
 .vscode/
 .idea/

@@ -3,3 +3,4 @@ pandas>=1.5.0
 plotly>=5.15.0
 psycopg2-binary>=2.9.7
 SQLAlchemy>=2.0.0
+toml>=0.10.2
