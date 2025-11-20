@@ -233,11 +233,12 @@ class AuthenticationManager:
                 "🏢 Gestión de Depósitos"
             ])
         
-        # Hospitalario: solo logias y hermanos
+        # Hospitalario: logias, hermanos y reservas
         elif 'hospitalario' == user_data.get('role'):
             sections.extend([
                 "🏛️ Gestión de Logias",
-                "👨‍🤝‍👨 Gestión de Hermanos"
+                "👨‍🤝‍👨 Gestión de Hermanos",
+                "📋 Formulario de Préstamo"
             ])
         
         sections.append("📚 Manual de Usuario")  # Todos pueden ver manual
@@ -396,11 +397,11 @@ class DatabaseManager:
                     duracion_dias INTEGER NOT NULL,
                     fecha_devolucion_estimada DATE NOT NULL,
                     fecha_devolucion_real DATE,
-                    estado VARCHAR(50) DEFAULT 'activo' CHECK (estado IN ('activo', 'devuelto', 'vencido')),
+                    estado VARCHAR(50) DEFAULT 'reservado' CHECK (estado IN ('reservado', 'activo', 'devuelto', 'vencido')),
                     observaciones_prestamo TEXT,
                     observaciones_devolucion TEXT,
                     autorizado_por VARCHAR(255),
-                    entregado_por VARCHAR(255) NOT NULL,
+                    entregado_por VARCHAR(255),
                     recibido_por VARCHAR(255),
                     deposito_devolucion_id INTEGER,
                     fecha_creacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -639,31 +640,726 @@ def gestionar_elementos():
     """Gestión de elementos ortopédicos - Solo Admin"""
     if not auth_manager.require_permission('admin', "🚫 Solo el Gran Arquitecto puede gestionar elementos ortopédicos"):
         return
-        
+
     st.header("🦽 Gestión de Elementos Ortopédicos")
-    st.info("👑 Sección exclusiva del Gran Arquitecto")
-    
-    st.markdown("### 🔧 Módulo en desarrollo con permisos de administrador")
+
+    tab1, tab2 = st.tabs(["➕ Nuevo Elemento", "📋 Inventario"])
+
+    with tab1:
+        st.subheader("Registrar Nuevo Elemento")
+
+        try:
+            conn = db.get_connection()
+            categorias_df = pd.read_sql_query("SELECT id, nombre FROM categorias WHERE activo = TRUE ORDER BY nombre", conn)
+            depositos_df = pd.read_sql_query("SELECT id, nombre FROM depositos WHERE activo = TRUE ORDER BY nombre", conn)
+            conn.close()
+
+            with st.form("elemento_form"):
+                col1, col2 = st.columns(2)
+
+                with col1:
+                    codigo = st.text_input("Código Único*", help="Ej: SR-001, BAS-045")
+                    nombre = st.text_input("Nombre del Elemento*", help="Ej: Silla de Ruedas Estándar")
+
+                    if not categorias_df.empty:
+                        categoria_id = st.selectbox(
+                            "Categoría*",
+                            options=categorias_df['id'].tolist(),
+                            format_func=lambda x: categorias_df[categorias_df['id'] == x]['nombre'].iloc[0]
+                        )
+                    else:
+                        st.error("No hay categorías disponibles")
+                        categoria_id = None
+
+                    if not depositos_df.empty:
+                        deposito_id = st.selectbox(
+                            "Depósito Inicial*",
+                            options=depositos_df['id'].tolist(),
+                            format_func=lambda x: depositos_df[depositos_df['id'] == x]['nombre'].iloc[0]
+                        )
+                    else:
+                        st.error("No hay depósitos disponibles")
+                        deposito_id = None
+
+                with col2:
+                    marca = st.text_input("Marca")
+                    modelo = st.text_input("Modelo")
+                    numero_serie = st.text_input("Número de Serie")
+                    fecha_ingreso = st.date_input(
+                        "Fecha de Ingreso*",
+                        value=date.today(),
+                        max_value=date.today()
+                    )
+
+                descripcion = st.text_area("Descripción")
+                observaciones = st.text_area("Observaciones")
+
+                if st.form_submit_button("💾 Guardar Elemento", use_container_width=True):
+                    if codigo and nombre and categoria_id and deposito_id:
+                        try:
+                            conn = db.get_connection()
+                            cursor = conn.cursor()
+                            cursor.execute("""
+                                INSERT INTO elementos (codigo, nombre, categoria_id, deposito_id,
+                                                     estado, descripcion, marca, modelo, numero_serie,
+                                                     fecha_ingreso, observaciones)
+                                VALUES (%s, %s, %s, %s, 'disponible', %s, %s, %s, %s, %s, %s)
+                            """, (codigo, nombre, categoria_id, deposito_id, descripcion,
+                                 marca, modelo, numero_serie, fecha_ingreso, observaciones))
+                            conn.commit()
+                            cursor.close()
+                            conn.close()
+                            st.success("✅ Elemento registrado exitosamente")
+                            st.rerun()
+                        except psycopg2.IntegrityError:
+                            st.error("❌ Ya existe un elemento con ese código")
+                            conn.rollback()
+                            cursor.close()
+                            conn.close()
+                        except Exception as e:
+                            st.error(f"❌ Error al guardar elemento: {e}")
+                            conn.rollback()
+                            cursor.close()
+                            conn.close()
+                    else:
+                        st.error("❌ Completa todos los campos obligatorios (*)")
+        except Exception as e:
+            st.error(f"❌ Error al cargar datos: {e}")
+
+    with tab2:
+        st.subheader("Inventario de Elementos")
+
+        try:
+            conn = db.get_connection()
+
+            # Filtros
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                depositos_df = pd.read_sql_query("SELECT id, nombre FROM depositos WHERE activo = TRUE ORDER BY nombre", conn)
+                filtro_deposito = st.selectbox(
+                    "Filtrar por Depósito",
+                    options=["Todos"] + depositos_df['nombre'].tolist()
+                )
+
+            with col2:
+                filtro_estado = st.selectbox(
+                    "Filtrar por Estado",
+                    options=["Todos", "disponible", "prestado", "mantenimiento"]
+                )
+
+            # Query con filtros
+            query = """
+                SELECT e.codigo, e.nombre, c.nombre as categoria, d.nombre as deposito,
+                       e.estado, e.marca, e.modelo
+                FROM elementos e
+                LEFT JOIN categorias c ON e.categoria_id = c.id
+                LEFT JOIN depositos d ON e.deposito_id = d.id
+                WHERE e.activo = TRUE
+            """
+
+            params = []
+            if filtro_deposito != "Todos":
+                query += " AND d.nombre = %s"
+                params.append(filtro_deposito)
+
+            if filtro_estado != "Todos":
+                query += " AND e.estado = %s"
+                params.append(filtro_estado)
+
+            query += " ORDER BY e.codigo"
+
+            if params:
+                elementos_df = pd.read_sql_query(query, conn, params=params)
+            else:
+                elementos_df = pd.read_sql_query(query, conn)
+
+            conn.close()
+
+            if not elementos_df.empty:
+                # Colorear según estado
+                def highlight_estado(row):
+                    if row['estado'] == 'disponible':
+                        return ['background-color: #d4edda'] * len(row)
+                    elif row['estado'] == 'prestado':
+                        return ['background-color: #fff3cd'] * len(row)
+                    elif row['estado'] == 'mantenimiento':
+                        return ['background-color: #f8d7da'] * len(row)
+                    return [''] * len(row)
+
+                st.dataframe(
+                    elementos_df.style.apply(highlight_estado, axis=1),
+                    use_container_width=True
+                )
+
+                st.caption(f"📊 Total de elementos: {len(elementos_df)}")
+
+                # Resumen por estado
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    disponibles = len(elementos_df[elementos_df['estado'] == 'disponible'])
+                    st.metric("✅ Disponibles", disponibles)
+                with col2:
+                    prestados = len(elementos_df[elementos_df['estado'] == 'prestado'])
+                    st.metric("📋 Prestados", prestados)
+                with col3:
+                    mantenimiento = len(elementos_df[elementos_df['estado'] == 'mantenimiento'])
+                    st.metric("🔧 Mantenimiento", mantenimiento)
+            else:
+                st.info("No hay elementos registrados")
+        except Exception as e:
+            st.error(f"❌ Error al cargar inventario: {e}")
 
 def gestionar_prestamos():
-    """Gestión de préstamos - Solo Admin"""
-    if not auth_manager.require_permission('admin', "🚫 Solo el Gran Arquitecto puede gestionar préstamos"):
+    """Sistema de Reservas y Préstamos - Hospitalarios crean reservas, Admins confirman entregas"""
+
+    # Verificar permiso mínimo (hospitalario o admin)
+    if not (auth_manager.has_permission('hospitalario') or auth_manager.has_permission('admin')):
+        st.error("🚫 Solo Hospitalarios y Administradores pueden acceder a esta sección")
         return
-        
-    st.header("📋 Formulario de Préstamo BEO")
-    st.info("👑 Sección exclusiva del Gran Arquitecto")
-    
-    st.markdown("### 📋 Módulo en desarrollo con permisos de administrador")
+
+    st.header("📋 Sistema de Reservas y Préstamos BEO")
+
+    user_role = st.session_state.user_data.get('role')
+
+    # Tabs según el rol
+    if user_role == 'admin':
+        tabs = st.tabs(["📦 Crear Reserva", "⏳ Reservas Pendientes", "✅ Préstamos Activos", "🚨 Vencidos", "🔄 Devoluciones"])
+
+        # Tab 1: Crear Reserva (Admin)
+        with tabs[0]:
+            crear_reserva()
+
+        # Tab 2: Confirmar Reservas (Solo Admin)
+        with tabs[1]:
+            confirmar_reservas()
+
+        # Tab 3: Préstamos Activos
+        with tabs[2]:
+            ver_prestamos_activos()
+
+        # Tab 4: Préstamos Vencidos
+        with tabs[3]:
+            ver_prestamos_vencidos()
+
+        # Tab 5: Devoluciones
+        with tabs[4]:
+            procesar_devoluciones()
+
+    elif user_role == 'hospitalario':
+        tabs = st.tabs(["📦 Crear Reserva", "📋 Mis Reservas"])
+
+        # Tab 1: Crear Reserva (Hospitalario)
+        with tabs[0]:
+            crear_reserva()
+
+        # Tab 2: Ver mis reservas
+        with tabs[1]:
+            ver_mis_reservas()
+
+def crear_reserva():
+    """Formulario para crear una reserva de préstamo"""
+    st.subheader("📦 Nueva Solicitud de Préstamo")
+    st.info("💡 Crea una reserva. El administrador la confirmará cuando entregue el elemento.")
+
+    try:
+        conn = db.get_connection()
+
+        # Cargar hermanos de la logia
+        hermanos_df = pd.read_sql_query("""
+            SELECT h.id, h.nombre, l.nombre as logia
+            FROM hermanos h
+            LEFT JOIN logias l ON h.logia_id = l.id
+            WHERE h.activo = TRUE
+            ORDER BY h.nombre
+        """, conn)
+
+        # Elementos disponibles por depósito
+        elementos_df = pd.read_sql_query("""
+            SELECT e.id, e.codigo, e.nombre, c.nombre as categoria, d.nombre as deposito
+            FROM elementos e
+            LEFT JOIN categorias c ON e.categoria_id = c.id
+            LEFT JOIN depositos d ON e.deposito_id = d.id
+            WHERE e.estado = 'disponible' AND e.activo = TRUE
+            ORDER BY d.nombre, e.codigo
+        """, conn)
+
+        conn.close()
+
+        if hermanos_df.empty:
+            st.warning("⚠️ No hay hermanos registrados. Registra hermanos primero.")
+            return
+
+        if elementos_df.empty:
+            st.warning("⚠️ No hay elementos disponibles para préstamo.")
+            return
+
+        # Mostrar stock disponible por depósito
+        with st.expander("📊 Ver Stock Disponible por Depósito"):
+            stock_por_deposito = elementos_df.groupby('deposito').agg({
+                'id': 'count',
+                'categoria': lambda x: ', '.join(x.unique())
+            }).rename(columns={'id': 'Cantidad', 'categoria': 'Categorías'})
+            st.dataframe(stock_por_deposito, use_container_width=True)
+
+        # Formulario de reserva
+        with st.form("reserva_form"):
+            st.markdown("### 👨‍🤝‍👨 Datos del Hermano Solicitante")
+
+            hermano_id = st.selectbox(
+                "Hermano que Solicita*",
+                options=hermanos_df['id'].tolist(),
+                format_func=lambda x: f"{hermanos_df[hermanos_df['id'] == x]['nombre'].iloc[0]} ({hermanos_df[hermanos_df['id'] == x]['logia'].iloc[0]})"
+            )
+
+            st.markdown("### 🦽 Elemento a Prestar")
+
+            # Filtrar por depósito primero
+            depositos_con_stock = elementos_df['deposito'].unique().tolist()
+            deposito_filtro = st.selectbox("Seleccionar Depósito*", options=depositos_con_stock)
+
+            elementos_filtrados = elementos_df[elementos_df['deposito'] == deposito_filtro]
+
+            elemento_id = st.selectbox(
+                "Elemento*",
+                options=elementos_filtrados['id'].tolist(),
+                format_func=lambda x: f"{elementos_filtrados[elementos_filtrados['id'] == x]['codigo'].iloc[0]} - {elementos_filtrados[elementos_filtrados['id'] == x]['nombre'].iloc[0]} ({elementos_filtrados[elementos_filtrados['id'] == x]['categoria'].iloc[0]})"
+            )
+
+            st.markdown("### ⏱️ Duración del Préstamo")
+
+            duracion_dias = st.number_input(
+                "Duración (días)*",
+                min_value=1,
+                max_value=365,
+                value=30,
+                help="Días que el elemento estará prestado"
+            )
+
+            observaciones = st.text_area("Observaciones de la Solicitud")
+
+            if st.form_submit_button("📝 Crear Reserva de Préstamo", use_container_width=True):
+                try:
+                    conn = db.get_connection()
+                    cursor = conn.cursor()
+
+                    fecha_hoy = date.today()
+                    fecha_estimada = fecha_hoy + timedelta(days=duracion_dias)
+
+                    # Crear beneficiario (en este caso es el mismo hermano)
+                    cursor.execute("""
+                        SELECT id FROM hermanos WHERE id = %s
+                    """, (hermano_id,))
+                    hermano = cursor.fetchone()
+
+                    if hermano:
+                        # Buscar o crear beneficiario para este hermano
+                        cursor.execute("""
+                            SELECT id FROM beneficiarios
+                            WHERE tipo = 'hermano' AND hermano_id = %s
+                        """, (hermano_id,))
+                        beneficiario = cursor.fetchone()
+
+                        if not beneficiario:
+                            # Crear beneficiario
+                            cursor.execute("""
+                                SELECT nombre, telefono, direccion FROM hermanos WHERE id = %s
+                            """, (hermano_id,))
+                            datos_hermano = cursor.fetchone()
+
+                            cursor.execute("""
+                                INSERT INTO beneficiarios (tipo, hermano_id, nombre, telefono, direccion)
+                                VALUES ('hermano', %s, %s, %s, %s)
+                                RETURNING id
+                            """, (hermano_id, datos_hermano[0], datos_hermano[1], datos_hermano[2]))
+                            beneficiario_id = cursor.fetchone()[0]
+                        else:
+                            beneficiario_id = beneficiario[0]
+
+                        # Crear préstamo con estado 'reservado'
+                        cursor.execute("""
+                            INSERT INTO prestamos (
+                                fecha_prestamo, elemento_id, beneficiario_id, hermano_solicitante_id,
+                                duracion_dias, fecha_devolucion_estimada, estado, observaciones_prestamo
+                            ) VALUES (%s, %s, %s, %s, %s, %s, 'reservado', %s)
+                        """, (fecha_hoy, elemento_id, beneficiario_id, hermano_id,
+                             duracion_dias, fecha_estimada, observaciones))
+
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+
+                        st.success(f"✅ Reserva creada exitosamente! Vence el {fecha_estimada.strftime('%d/%m/%Y')}")
+                        st.info("📌 Un administrador debe confirmar la entrega para que el estado cambie a 'prestado'")
+                        time.sleep(2)
+                        st.rerun()
+                    else:
+                        st.error("❌ Hermano no encontrado")
+                        cursor.close()
+                        conn.close()
+
+                except Exception as e:
+                    st.error(f"❌ Error al crear reserva: {e}")
+                    conn.rollback()
+                    cursor.close()
+                    conn.close()
+
+    except Exception as e:
+        st.error(f"❌ Error al cargar datos: {e}")
+
+def confirmar_reservas():
+    """Confirmar reservas pendientes (Solo Admin)"""
+    st.subheader("⏳ Reservas Pendientes de Confirmación")
+    st.info("🔓 Confirma la entrega del elemento para cambiar el estado a 'PRESTADO'")
+
+    try:
+        conn = db.get_connection()
+
+        reservas_df = pd.read_sql_query("""
+            SELECT p.id, p.fecha_prestamo, h.nombre as hermano, e.codigo, e.nombre as elemento,
+                   d.nombre as deposito, p.duracion_dias, p.fecha_devolucion_estimada,
+                   p.observaciones_prestamo
+            FROM prestamos p
+            LEFT JOIN beneficiarios b ON p.beneficiario_id = b.id
+            LEFT JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            LEFT JOIN elementos e ON p.elemento_id = e.id
+            LEFT JOIN depositos d ON e.deposito_id = d.id
+            WHERE p.estado = 'reservado'
+            ORDER BY p.fecha_prestamo DESC
+        """, conn)
+
+        conn.close()
+
+        if not reservas_df.empty:
+            st.dataframe(reservas_df, use_container_width=True)
+            st.caption(f"📊 Total de reservas pendientes: {len(reservas_df)}")
+
+            # Seleccionar reserva para confirmar
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                reserva_id = st.selectbox(
+                    "Seleccionar Reserva para Confirmar Entrega",
+                    options=reservas_df['id'].tolist(),
+                    format_func=lambda x: f"ID {x} - {reservas_df[reservas_df['id'] == x]['hermano'].iloc[0]} - {reservas_df[reservas_df['id'] == x]['elemento'].iloc[0]}"
+                )
+
+            with col2:
+                if st.button("✅ Confirmar Entrega", use_container_width=True, type="primary"):
+                    try:
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+
+                        # Obtener elemento_id de la reserva
+                        cursor.execute("SELECT elemento_id FROM prestamos WHERE id = %s", (reserva_id,))
+                        elemento_id = cursor.fetchone()[0]
+
+                        # Actualizar estado del préstamo a 'activo'
+                        cursor.execute("""
+                            UPDATE prestamos
+                            SET estado = 'activo',
+                                entregado_por = %s
+                            WHERE id = %s
+                        """, (st.session_state.username, reserva_id))
+
+                        # Actualizar estado del elemento a 'prestado'
+                        cursor.execute("""
+                            UPDATE elementos
+                            SET estado = 'prestado'
+                            WHERE id = %s
+                        """, (elemento_id,))
+
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+
+                        st.success("✅ Entrega confirmada! El elemento ahora está PRESTADO")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al confirmar entrega: {e}")
+                        conn.rollback()
+                        cursor.close()
+                        conn.close()
+        else:
+            st.info("📭 No hay reservas pendientes de confirmación")
+
+    except Exception as e:
+        st.error(f"❌ Error al cargar reservas: {e}")
+
+def ver_prestamos_activos():
+    """Ver préstamos actualmente vigentes"""
+    st.subheader("✅ Préstamos Activos")
+
+    try:
+        conn = db.get_connection()
+
+        prestamos_df = pd.read_sql_query("""
+            SELECT p.id, p.fecha_prestamo, h.nombre as hermano, h.telefono,
+                   e.codigo, e.nombre as elemento, d.nombre as deposito,
+                   p.fecha_devolucion_estimada,
+                   (p.fecha_devolucion_estimada - CURRENT_DATE) as dias_restantes
+            FROM prestamos p
+            LEFT JOIN beneficiarios b ON p.beneficiario_id = b.id
+            LEFT JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            LEFT JOIN elementos e ON p.elemento_id = e.id
+            LEFT JOIN depositos d ON e.deposito_id = d.id
+            WHERE p.estado = 'activo' AND p.fecha_devolucion_real IS NULL
+            ORDER BY p.fecha_devolucion_estimada ASC
+        """, conn)
+
+        conn.close()
+
+        if not prestamos_df.empty:
+            # Colorear según días restantes
+            def highlight_dias(row):
+                dias = row['dias_restantes']
+                if dias < 0:
+                    return ['background-color: #f8d7da'] * len(row)  # Rojo (vencido)
+                elif dias <= 7:
+                    return ['background-color: #fff3cd'] * len(row)  # Amarillo (por vencer)
+                else:
+                    return ['background-color: #d4edda'] * len(row)  # Verde (vigente)
+
+            st.dataframe(
+                prestamos_df.style.apply(highlight_dias, axis=1),
+                use_container_width=True
+            )
+            st.caption(f"📊 Total de préstamos activos: {len(prestamos_df)}")
+        else:
+            st.info("📭 No hay préstamos activos")
+
+    except Exception as e:
+        st.error(f"❌ Error al cargar préstamos: {e}")
+
+def ver_prestamos_vencidos():
+    """Ver préstamos vencidos para reclamar"""
+    st.subheader("🚨 Préstamos Vencidos - Requieren Seguimiento")
+
+    try:
+        conn = db.get_connection()
+
+        vencidos_df = pd.read_sql_query("""
+            SELECT p.id, p.fecha_prestamo, h.nombre as hermano, h.telefono, h.email,
+                   e.codigo, e.nombre as elemento,
+                   p.fecha_devolucion_estimada,
+                   (CURRENT_DATE - p.fecha_devolucion_estimada) as dias_vencidos,
+                   l.nombre as logia, l.hospitalario, l.telefono_hospitalario
+            FROM prestamos p
+            LEFT JOIN beneficiarios b ON p.beneficiario_id = b.id
+            LEFT JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            LEFT JOIN logias l ON h.logia_id = l.id
+            LEFT JOIN elementos e ON p.elemento_id = e.id
+            WHERE p.estado = 'activo'
+              AND p.fecha_devolucion_real IS NULL
+              AND p.fecha_devolucion_estimada < CURRENT_DATE
+            ORDER BY dias_vencidos DESC
+        """, conn)
+
+        conn.close()
+
+        if not vencidos_df.empty:
+            st.error(f"⚠️ {len(vencidos_df)} préstamos vencidos requieren atención")
+
+            st.dataframe(vencidos_df, use_container_width=True)
+
+            st.markdown("### 📞 Contactos para Reclamo")
+            for idx, row in vencidos_df.iterrows():
+                with st.expander(f"📋 {row['hermano']} - {row['elemento']} ({row['dias_vencidos']} días vencido)"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**Hermano:** {row['hermano']}")
+                        st.markdown(f"**Teléfono:** {row['telefono']}")
+                        st.markdown(f"**Email:** {row['email']}")
+                    with col2:
+                        st.markdown(f"**Logia:** {row['logia']}")
+                        st.markdown(f"**Hospitalario:** {row['hospitalario']}")
+                        st.markdown(f"**Tel. Hospitalario:** {row['telefono_hospitalario']}")
+        else:
+            st.success("✅ No hay préstamos vencidos. ¡Todo al día!")
+
+    except Exception as e:
+        st.error(f"❌ Error al cargar vencidos: {e}")
+
+def procesar_devoluciones():
+    """Registrar devolución de elementos"""
+    st.subheader("🔄 Procesar Devoluciones")
+
+    try:
+        conn = db.get_connection()
+
+        prestamos_df = pd.read_sql_query("""
+            SELECT p.id, h.nombre as hermano, e.codigo, e.nombre as elemento,
+                   p.fecha_prestamo, p.fecha_devolucion_estimada
+            FROM prestamos p
+            LEFT JOIN beneficiarios b ON p.beneficiario_id = b.id
+            LEFT JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            LEFT JOIN elementos e ON p.elemento_id = e.id
+            WHERE p.estado = 'activo' AND p.fecha_devolucion_real IS NULL
+            ORDER BY p.fecha_devolucion_estimada ASC
+        """, conn)
+
+        conn.close()
+
+        if not prestamos_df.empty:
+            with st.form("devolucion_form"):
+                prestamo_id = st.selectbox(
+                    "Seleccionar Préstamo a Devolver*",
+                    options=prestamos_df['id'].tolist(),
+                    format_func=lambda x: f"{prestamos_df[prestamos_df['id'] == x]['hermano'].iloc[0]} - {prestamos_df[prestamos_df['id'] == x]['elemento'].iloc[0]}"
+                )
+
+                estado_elemento = st.selectbox(
+                    "Estado del Elemento Devuelto*",
+                    options=["disponible", "mantenimiento"],
+                    format_func=lambda x: "✅ Bueno (Disponible)" if x == "disponible" else "🔧 Requiere Mantenimiento"
+                )
+
+                observaciones_devolucion = st.text_area("Observaciones de la Devolución")
+
+                if st.form_submit_button("✅ Registrar Devolución", use_container_width=True):
+                    try:
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+
+                        # Obtener elemento_id
+                        cursor.execute("SELECT elemento_id FROM prestamos WHERE id = %s", (prestamo_id,))
+                        elemento_id = cursor.fetchone()[0]
+
+                        # Actualizar préstamo
+                        cursor.execute("""
+                            UPDATE prestamos
+                            SET fecha_devolucion_real = CURRENT_DATE,
+                                estado = 'devuelto',
+                                observaciones_devolucion = %s,
+                                recibido_por = %s
+                            WHERE id = %s
+                        """, (observaciones_devolucion, st.session_state.username, prestamo_id))
+
+                        # Actualizar estado del elemento
+                        cursor.execute("""
+                            UPDATE elementos
+                            SET estado = %s
+                            WHERE id = %s
+                        """, (estado_elemento, elemento_id))
+
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+
+                        st.success("✅ Devolución registrada exitosamente!")
+                        time.sleep(1)
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"❌ Error al registrar devolución: {e}")
+                        conn.rollback()
+                        cursor.close()
+                        conn.close()
+        else:
+            st.info("📭 No hay préstamos activos para devolver")
+
+    except Exception as e:
+        st.error(f"❌ Error al cargar préstamos: {e}")
+
+def ver_mis_reservas():
+    """Ver reservas del hospitalario (solo lectura)"""
+    st.subheader("📋 Mis Reservas Creadas")
+
+    try:
+        conn = db.get_connection()
+
+        # Mostrar todas las reservas (pendientes y confirmadas)
+        reservas_df = pd.read_sql_query("""
+            SELECT p.id, p.fecha_prestamo, h.nombre as hermano, e.codigo, e.nombre as elemento,
+                   p.duracion_dias, p.fecha_devolucion_estimada, p.estado,
+                   CASE
+                       WHEN p.estado = 'reservado' THEN 'Pendiente de Entrega'
+                       WHEN p.estado = 'activo' THEN 'Confirmado - Prestado'
+                       WHEN p.estado = 'devuelto' THEN 'Devuelto'
+                       ELSE p.estado
+                   END as estado_desc
+            FROM prestamos p
+            LEFT JOIN beneficiarios b ON p.beneficiario_id = b.id
+            LEFT JOIN hermanos h ON p.hermano_solicitante_id = h.id
+            LEFT JOIN elementos e ON p.elemento_id = e.id
+            ORDER BY p.fecha_prestamo DESC
+            LIMIT 50
+        """, conn)
+
+        conn.close()
+
+        if not reservas_df.empty:
+            st.dataframe(reservas_df[['id', 'fecha_prestamo', 'hermano', 'elemento', 'estado_desc', 'fecha_devolucion_estimada']],
+                        use_container_width=True)
+            st.caption(f"📊 Mostrando las últimas 50 reservas/préstamos")
+        else:
+            st.info("📭 No hay reservas creadas aún")
+
+    except Exception as e:
+        st.error(f"❌ Error al cargar reservas: {e}")
 
 def gestionar_depositos():
     """Gestión de depósitos - Solo Admin"""
     if not auth_manager.require_permission('admin', "🚫 Solo el Gran Arquitecto puede gestionar depósitos"):
         return
-        
+
     st.header("🏢 Gestión de Depósitos")
-    st.info("👑 Sección exclusiva del Gran Arquitecto")
-    
-    st.markdown("### 🏢 Módulo en desarrollo con permisos de administrador")
+
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        st.subheader("Nuevo Depósito")
+        with st.form("deposito_form"):
+            nombre = st.text_input("Nombre del Depósito*")
+            direccion = st.text_area("Dirección")
+            responsable = st.text_input("Responsable")
+            telefono = st.text_input("Teléfono")
+            email = st.text_input("Email")
+
+            if st.form_submit_button("💾 Guardar Depósito"):
+                if nombre:
+                    try:
+                        conn = db.get_connection()
+                        cursor = conn.cursor()
+                        cursor.execute("""
+                            INSERT INTO depositos (nombre, direccion, responsable, telefono, email)
+                            VALUES (%s, %s, %s, %s, %s)
+                        """, (nombre, direccion, responsable, telefono, email))
+                        conn.commit()
+                        cursor.close()
+                        conn.close()
+                        st.success("✅ Depósito guardado exitosamente")
+                        st.rerun()
+                    except psycopg2.IntegrityError:
+                        st.error("❌ Ya existe un depósito con ese nombre")
+                        conn.rollback()
+                        cursor.close()
+                        conn.close()
+                    except Exception as e:
+                        st.error(f"❌ Error al guardar depósito: {e}")
+                        conn.rollback()
+                        cursor.close()
+                        conn.close()
+                else:
+                    st.error("❌ El nombre del depósito es obligatorio")
+
+    with col2:
+        st.subheader("Depósitos Registrados")
+        try:
+            conn = db.get_connection()
+            depositos_df = pd.read_sql_query("""
+                SELECT nombre, direccion, responsable, telefono, email
+                FROM depositos
+                WHERE activo = TRUE
+                ORDER BY nombre
+            """, conn)
+            conn.close()
+
+            if not depositos_df.empty:
+                st.dataframe(depositos_df, use_container_width=True)
+                st.caption(f"📊 Total de depósitos: {len(depositos_df)}")
+            else:
+                st.info("No hay depósitos registrados")
+        except Exception as e:
+            st.error(f"❌ Error al cargar depósitos: {e}")
 
 def mostrar_dashboard():
     """Dashboard con estadísticas y gráficos - Todos pueden ver"""
