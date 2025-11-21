@@ -470,16 +470,16 @@ class DatabaseManager:
 db = DatabaseManager()
 
 def gestionar_logias():
-    """Gestión de logias - Solo Admin y Hospitalario"""
+    """Gestión de logias - ABM completo con validaciones de integridad"""
     if not auth_manager.require_permission('logias', "🚫 Solo el Gran Arquitecto y Hospitalario pueden gestionar logias"):
         return
-        
+
     st.header("🏛️ Gestión de Logias")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.subheader("Nueva Logia")
+
+    tab1, tab2, tab3 = st.tabs(["➕ Nueva Logia", "📋 Listado", "✏️ Editar/Eliminar"])
+
+    # TAB 1: ALTA - Nueva Logia
+    with tab1:
         with st.form("logia_form"):
             nombre = st.text_input("Nombre de la Logia*")
             numero = st.number_input("Número", min_value=1, step=1, value=None)
@@ -489,8 +489,8 @@ def gestionar_logias():
             hospitalario = st.text_input("Hospitalario")
             telefono_hospitalario = st.text_input("Teléfono del Hospitalario")
             direccion = st.text_area("Dirección")
-            
-            if st.form_submit_button("Guardar Logia"):
+
+            if st.form_submit_button("💾 Guardar Logia"):
                 if nombre:
                     try:
                         conn = db.get_connection()
@@ -504,62 +504,183 @@ def gestionar_logias():
                         conn.commit()
                         cursor.close()
                         conn.close()
-                        st.success("Logia guardada exitosamente")
+                        st.success("✅ Logia guardada exitosamente")
                         st.rerun()
                     except psycopg2.IntegrityError:
-                        st.error("Ya existe una logia con ese nombre")
+                        st.error("❌ Ya existe una logia con ese nombre")
                         conn.rollback()
                         cursor.close()
                         conn.close()
                     except Exception as e:
-                        st.error(f"Error al guardar logia: {e}")
+                        st.error(f"❌ Error al guardar logia: {e}")
                         conn.rollback()
                         cursor.close()
                         conn.close()
                 else:
-                    st.error("El nombre de la logia es obligatorio")
-    
-    with col2:
-        st.subheader("Logias Registradas")
+                    st.error("❌ El nombre de la logia es obligatorio")
+
+    # TAB 2: LISTADO
+    with tab2:
         try:
             conn = db.get_connection()
             logias_df = pd.read_sql_query("""
-                SELECT nombre, numero, oriente, venerable_maestro, hospitalario
-                FROM logias 
-                WHERE activo = TRUE
-                ORDER BY numero, nombre
+                SELECT l.id, l.nombre, l.numero, l.oriente, l.venerable_maestro,
+                       l.hospitalario, COUNT(h.id) as cant_hermanos
+                FROM logias l
+                LEFT JOIN hermanos h ON l.id = h.logia_id AND h.activo = TRUE
+                WHERE l.activo = TRUE
+                GROUP BY l.id, l.nombre, l.numero, l.oriente, l.venerable_maestro, l.hospitalario
+                ORDER BY l.numero, l.nombre
             """, conn)
             conn.close()
-            
+
             if not logias_df.empty:
-                st.dataframe(logias_df, use_container_width=True)
+                # Formatear el dataframe para mostrar
+                display_df = logias_df[['nombre', 'numero', 'oriente', 'venerable_maestro', 'hospitalario', 'cant_hermanos']]
+                display_df.columns = ['Nombre', 'Número', 'Oriente', 'V.·. Maestro', 'Hospitalario', 'Hermanos']
+                st.dataframe(display_df, use_container_width=True)
             else:
-                st.info("No hay logias registradas")
+                st.info("📭 No hay logias registradas")
         except Exception as e:
-            st.error(f"Error al cargar logias: {e}")
+            st.error(f"❌ Error al cargar logias: {e}")
+
+    # TAB 3: MODIFICACIÓN y BAJA
+    with tab3:
+        try:
+            conn = db.get_connection()
+            logias_df = pd.read_sql_query("""
+                SELECT l.id, l.nombre, l.numero, l.oriente, l.venerable_maestro,
+                       l.telefono_venerable, l.hospitalario, l.telefono_hospitalario,
+                       l.direccion, COUNT(h.id) as cant_hermanos
+                FROM logias l
+                LEFT JOIN hermanos h ON l.id = h.logia_id AND h.activo = TRUE
+                WHERE l.activo = TRUE
+                GROUP BY l.id
+                ORDER BY l.numero, l.nombre
+            """, conn)
+            conn.close()
+
+            if not logias_df.empty:
+                logia_seleccionada = st.selectbox(
+                    "Seleccione una logia:",
+                    options=logias_df['id'].tolist(),
+                    format_func=lambda x: f"{logias_df[logias_df['id'] == x]['nombre'].iloc[0]} N°{logias_df[logias_df['id'] == x]['numero'].iloc[0] if pd.notna(logias_df[logias_df['id'] == x]['numero'].iloc[0]) else 'S/N'}"
+                )
+
+                logia_data = logias_df[logias_df['id'] == logia_seleccionada].iloc[0]
+
+                col1, col2 = st.columns(2)
+
+                # EDITAR
+                with col1:
+                    st.subheader("✏️ Editar Logia")
+                    with st.form("editar_logia_form"):
+                        edit_nombre = st.text_input("Nombre*", value=logia_data['nombre'])
+                        edit_numero = st.number_input("Número", min_value=1, step=1,
+                                                     value=int(logia_data['numero']) if pd.notna(logia_data['numero']) else None)
+                        edit_oriente = st.text_input("Oriente", value=logia_data['oriente'] or "")
+                        edit_vm = st.text_input("V.·. Maestro", value=logia_data['venerable_maestro'] or "")
+                        edit_tel_vm = st.text_input("Tel. Venerable", value=logia_data['telefono_venerable'] or "")
+                        edit_hosp = st.text_input("Hospitalario", value=logia_data['hospitalario'] or "")
+                        edit_tel_hosp = st.text_input("Tel. Hospitalario", value=logia_data['telefono_hospitalario'] or "")
+                        edit_dir = st.text_area("Dirección", value=logia_data['direccion'] or "")
+
+                        if st.form_submit_button("💾 Guardar Cambios"):
+                            if edit_nombre:
+                                try:
+                                    conn = db.get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute("""
+                                        UPDATE logias
+                                        SET nombre = %s, numero = %s, oriente = %s, venerable_maestro = %s,
+                                            telefono_venerable = %s, hospitalario = %s, telefono_hospitalario = %s,
+                                            direccion = %s
+                                        WHERE id = %s
+                                    """, (edit_nombre, edit_numero, edit_oriente, edit_vm, edit_tel_vm,
+                                         edit_hosp, edit_tel_hosp, edit_dir, logia_seleccionada))
+                                    conn.commit()
+                                    cursor.close()
+                                    conn.close()
+                                    st.success("✅ Logia actualizada exitosamente")
+                                    st.rerun()
+                                except psycopg2.IntegrityError:
+                                    st.error("❌ Ya existe una logia con ese nombre")
+                                    conn.rollback()
+                                    cursor.close()
+                                    conn.close()
+                                except Exception as e:
+                                    st.error(f"❌ Error al actualizar: {e}")
+                                    conn.rollback()
+                                    cursor.close()
+                                    conn.close()
+                            else:
+                                st.error("❌ El nombre es obligatorio")
+
+                # ELIMINAR
+                with col2:
+                    st.subheader("🗑️ Eliminar Logia")
+
+                    cant_hermanos = int(logia_data['cant_hermanos'])
+
+                    if cant_hermanos > 0:
+                        st.warning(f"⚠️ Esta logia tiene **{cant_hermanos} hermano(s)** asociado(s)")
+                        st.error("❌ No se puede eliminar una logia con hermanos registrados")
+                        st.info("💡 Primero debe reubicar o eliminar los hermanos asociados")
+                    else:
+                        st.info("✅ Esta logia no tiene hermanos asociados y puede ser eliminada")
+
+                        with st.form("eliminar_logia_form"):
+                            st.warning(f"¿Está seguro de eliminar la logia **{logia_data['nombre']}**?")
+                            confirmacion = st.checkbox("Confirmo que deseo eliminar esta logia")
+
+                            if st.form_submit_button("🗑️ Eliminar Logia", type="primary"):
+                                if confirmacion:
+                                    try:
+                                        conn = db.get_connection()
+                                        cursor = conn.cursor()
+                                        cursor.execute("""
+                                            UPDATE logias SET activo = FALSE WHERE id = %s
+                                        """, (logia_seleccionada,))
+                                        conn.commit()
+                                        cursor.close()
+                                        conn.close()
+                                        st.success("✅ Logia eliminada exitosamente")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error al eliminar: {e}")
+                                        conn.rollback()
+                                        cursor.close()
+                                        conn.close()
+                                else:
+                                    st.error("❌ Debe confirmar la eliminación")
+            else:
+                st.info("📭 No hay logias registradas")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
 def gestionar_hermanos():
-    """Gestión de hermanos - Solo Admin y Hospitalario"""
+    """Gestión de hermanos - ABM completo con validaciones de integridad"""
     if not auth_manager.require_permission('hermanos', "🚫 Solo el Gran Arquitecto y Hospitalario pueden gestionar hermanos"):
         return
-        
+
     st.header("👨‍🤝‍👨 Gestión de Hermanos")
-    
-    tab1, tab2 = st.tabs(["Nuevo Hermano", "Lista de Hermanos"])
-    
+
+    tab1, tab2, tab3 = st.tabs(["➕ Nuevo Hermano", "📋 Listado", "✏️ Editar/Eliminar"])
+
+    # TAB 1: ALTA - Nuevo Hermano
     with tab1:
         try:
             conn = db.get_connection()
             logias_df = pd.read_sql_query("SELECT id, nombre, numero FROM logias WHERE activo = TRUE ORDER BY numero, nombre", conn)
             conn.close()
-            
+
             with st.form("hermano_form_completo"):
                 col1, col2 = st.columns(2)
-                
+
                 with col1:
                     nombre = st.text_input("Nombre Completo*")
                     telefono = st.text_input("Teléfono")
-                    
+
                     if not logias_df.empty:
                         logia_id = st.selectbox(
                             "Logia*",
@@ -569,7 +690,7 @@ def gestionar_hermanos():
                     else:
                         st.error("No hay logias disponibles")
                         logia_id = None
-                
+
                 with col2:
                     grado = st.selectbox(
                         "Grado",
@@ -578,26 +699,26 @@ def gestionar_hermanos():
                     direccion = st.text_area("Dirección")
                     email = st.text_input("Email")
                     fecha_iniciacion = st.date_input(
-                        "Fecha de Iniciación", 
+                        "Fecha de Iniciación",
                         value=None,
                         min_value=date(1960, 1, 1),
                         max_value=date.today(),
                         help="Fecha de iniciación masónica (desde 1960)"
                     )
                     observaciones = st.text_area("Observaciones")
-                
-                submitted = st.form_submit_button("✅ Guardar Hermano", use_container_width=True)
-                
+
+                submitted = st.form_submit_button("💾 Guardar Hermano", use_container_width=True)
+
                 if submitted:
                     if nombre and logia_id:
                         try:
                             conn = db.get_connection()
                             cursor = conn.cursor()
                             cursor.execute("""
-                                INSERT INTO hermanos (nombre, telefono, logia_id, grado, direccion, 
+                                INSERT INTO hermanos (nombre, telefono, logia_id, grado, direccion,
                                                     email, fecha_iniciacion, observaciones)
                                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                            """, (nombre, telefono, logia_id, grado, direccion, 
+                            """, (nombre, telefono, logia_id, grado, direccion,
                                  email, fecha_iniciacion, observaciones))
                             conn.commit()
                             cursor.close()
@@ -613,28 +734,165 @@ def gestionar_hermanos():
                         st.error("❌ Nombre y logia son obligatorios")
         except Exception as e:
             st.error(f"Error al cargar datos: {e}")
-    
+
+    # TAB 2: LISTADO
     with tab2:
         st.subheader("Lista de Hermanos")
-        
+
         try:
             conn = db.get_connection()
             hermanos_df = pd.read_sql_query("""
-                SELECT h.id, h.nombre, h.telefono, h.grado, l.nombre as logia, h.activo
+                SELECT h.id, h.nombre, h.telefono, h.grado, l.nombre as logia, h.email,
+                       (SELECT COUNT(*) FROM beneficiarios b WHERE (b.hermano_id = h.id OR b.hermano_responsable_id = h.id)) as cant_beneficiarios,
+                       (SELECT COUNT(*) FROM prestamos p WHERE p.hermano_solicitante_id = h.id) as cant_prestamos
                 FROM hermanos h
                 LEFT JOIN logias l ON h.logia_id = l.id
                 WHERE h.activo = TRUE
                 ORDER BY h.nombre
             """, conn)
             conn.close()
-            
+
             if not hermanos_df.empty:
-                st.dataframe(hermanos_df, use_container_width=True)
+                display_df = hermanos_df[['nombre', 'grado', 'logia', 'telefono', 'email', 'cant_beneficiarios', 'cant_prestamos']]
+                display_df.columns = ['Nombre', 'Grado', 'Logia', 'Teléfono', 'Email', 'Beneficiarios', 'Préstamos']
+                st.dataframe(display_df, use_container_width=True)
                 st.caption(f"📊 Total de hermanos activos: {len(hermanos_df)}")
             else:
-                st.info("No hay hermanos registrados")
+                st.info("📭 No hay hermanos registrados")
         except Exception as e:
-            st.error(f"Error al cargar hermanos: {e}")
+            st.error(f"❌ Error al cargar hermanos: {e}")
+
+    # TAB 3: MODIFICACIÓN y BAJA
+    with tab3:
+        try:
+            conn = db.get_connection()
+            hermanos_df = pd.read_sql_query("""
+                SELECT h.*, l.nombre as logia_nombre,
+                       (SELECT COUNT(*) FROM beneficiarios b WHERE (b.hermano_id = h.id OR b.hermano_responsable_id = h.id)) as cant_beneficiarios,
+                       (SELECT COUNT(*) FROM prestamos p WHERE p.hermano_solicitante_id = h.id) as cant_prestamos
+                FROM hermanos h
+                LEFT JOIN logias l ON h.logia_id = l.id
+                WHERE h.activo = TRUE
+                ORDER BY h.nombre
+            """, conn)
+
+            logias_df = pd.read_sql_query("SELECT id, nombre, numero FROM logias WHERE activo = TRUE ORDER BY numero, nombre", conn)
+            conn.close()
+
+            if not hermanos_df.empty:
+                hermano_seleccionado = st.selectbox(
+                    "Seleccione un hermano:",
+                    options=hermanos_df['id'].tolist(),
+                    format_func=lambda x: f"{hermanos_df[hermanos_df['id'] == x]['nombre'].iloc[0]} - {hermanos_df[hermanos_df['id'] == x]['logia_nombre'].iloc[0]}"
+                )
+
+                hermano_data = hermanos_df[hermanos_df['id'] == hermano_seleccionado].iloc[0]
+
+                col1, col2 = st.columns(2)
+
+                # EDITAR
+                with col1:
+                    st.subheader("✏️ Editar Hermano")
+                    with st.form("editar_hermano_form"):
+                        edit_nombre = st.text_input("Nombre*", value=hermano_data['nombre'])
+                        edit_telefono = st.text_input("Teléfono", value=hermano_data['telefono'] or "")
+
+                        if not logias_df.empty:
+                            logia_index = logias_df[logias_df['id'] == hermano_data['logia_id']].index[0]
+                            edit_logia_id = st.selectbox(
+                                "Logia*",
+                                options=logias_df['id'].tolist(),
+                                index=logia_index,
+                                format_func=lambda x: f"{logias_df[logias_df['id'] == x]['nombre'].iloc[0]} N°{logias_df[logias_df['id'] == x]['numero'].iloc[0] if pd.notna(logias_df[logias_df['id'] == x]['numero'].iloc[0]) else 'S/N'}"
+                            )
+
+                        grados = ["Apr:.", "Comp:.", "M:.M:.", "Gr:. 4°", "Gr:. 18°", "Gr:. 30°", "Gr:. 32°", "Gr:. 33°", "Otro"]
+                        grado_index = grados.index(hermano_data['grado']) if hermano_data['grado'] in grados else 0
+                        edit_grado = st.selectbox("Grado", options=grados, index=grado_index)
+
+                        edit_direccion = st.text_area("Dirección", value=hermano_data['direccion'] or "")
+                        edit_email = st.text_input("Email", value=hermano_data['email'] or "")
+                        edit_fecha_iniciacion = st.date_input(
+                            "Fecha de Iniciación",
+                            value=hermano_data['fecha_iniciacion'] if pd.notna(hermano_data['fecha_iniciacion']) else None,
+                            min_value=date(1960, 1, 1),
+                            max_value=date.today()
+                        )
+                        edit_observaciones = st.text_area("Observaciones", value=hermano_data['observaciones'] or "")
+
+                        if st.form_submit_button("💾 Guardar Cambios"):
+                            if edit_nombre and edit_logia_id:
+                                try:
+                                    conn = db.get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute("""
+                                        UPDATE hermanos
+                                        SET nombre = %s, telefono = %s, logia_id = %s, grado = %s,
+                                            direccion = %s, email = %s, fecha_iniciacion = %s, observaciones = %s
+                                        WHERE id = %s
+                                    """, (edit_nombre, edit_telefono, edit_logia_id, edit_grado,
+                                         edit_direccion, edit_email, edit_fecha_iniciacion, edit_observaciones,
+                                         hermano_seleccionado))
+                                    conn.commit()
+                                    cursor.close()
+                                    conn.close()
+                                    st.success("✅ Hermano actualizado exitosamente")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ Error al actualizar: {e}")
+                                    conn.rollback()
+                                    cursor.close()
+                                    conn.close()
+                            else:
+                                st.error("❌ Nombre y logia son obligatorios")
+
+                # ELIMINAR
+                with col2:
+                    st.subheader("🗑️ Eliminar Hermano")
+
+                    cant_beneficiarios = int(hermano_data['cant_beneficiarios'])
+                    cant_prestamos = int(hermano_data['cant_prestamos'])
+
+                    tiene_relaciones = cant_beneficiarios > 0 or cant_prestamos > 0
+
+                    if tiene_relaciones:
+                        st.warning("⚠️ Este hermano tiene datos asociados:")
+                        if cant_beneficiarios > 0:
+                            st.error(f"❌ {cant_beneficiarios} beneficiario(s)")
+                        if cant_prestamos > 0:
+                            st.error(f"❌ {cant_prestamos} préstamo(s)")
+                        st.info("💡 Primero debe eliminar los registros asociados")
+                    else:
+                        st.info("✅ Este hermano no tiene datos asociados y puede ser eliminado")
+
+                        with st.form("eliminar_hermano_form"):
+                            st.warning(f"¿Está seguro de eliminar al hermano **{hermano_data['nombre']}**?")
+                            confirmacion = st.checkbox("Confirmo que deseo eliminar este hermano")
+
+                            if st.form_submit_button("🗑️ Eliminar Hermano", type="primary"):
+                                if confirmacion:
+                                    try:
+                                        conn = db.get_connection()
+                                        cursor = conn.cursor()
+                                        cursor.execute("""
+                                            UPDATE hermanos SET activo = FALSE WHERE id = %s
+                                        """, (hermano_seleccionado,))
+                                        conn.commit()
+                                        cursor.close()
+                                        conn.close()
+                                        st.success("✅ Hermano eliminado exitosamente")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error al eliminar: {e}")
+                                        conn.rollback()
+                                        cursor.close()
+                                        conn.close()
+                                else:
+                                    st.error("❌ Debe confirmar la eliminación")
+            else:
+                st.info("📭 No hay hermanos registrados")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
 def gestionar_elementos():
     """Gestión de elementos ortopédicos - Solo Admin"""
@@ -643,7 +901,7 @@ def gestionar_elementos():
 
     st.header("🦽 Gestión de Elementos Ortopédicos")
 
-    tab1, tab2 = st.tabs(["➕ Nuevo Elemento", "📋 Inventario"])
+    tab1, tab2, tab3 = st.tabs(["➕ Nuevo Elemento", "📋 Inventario", "✏️ Editar/Eliminar"])
 
     with tab1:
         st.subheader("Registrar Nuevo Elemento")
@@ -808,6 +1066,159 @@ def gestionar_elementos():
                 st.info("No hay elementos registrados")
         except Exception as e:
             st.error(f"❌ Error al cargar inventario: {e}")
+
+    # TAB 3: MODIFICACIÓN y BAJA
+    with tab3:
+        st.subheader("Editar o Eliminar Elemento")
+
+        try:
+            conn = db.get_connection()
+            elementos_df = pd.read_sql_query("""
+                SELECT e.*, c.nombre as categoria_nombre, d.nombre as deposito_nombre,
+                       (SELECT COUNT(*) FROM prestamos p WHERE p.elemento_id = e.id) as cant_prestamos,
+                       (SELECT COUNT(*) FROM historial_estados h WHERE h.elemento_id = e.id) as cant_historial
+                FROM elementos e
+                LEFT JOIN categorias c ON e.categoria_id = c.id
+                LEFT JOIN depositos d ON e.deposito_id = d.id
+                WHERE e.activo = TRUE
+                ORDER BY e.codigo
+            """, conn)
+
+            categorias_df = pd.read_sql_query("SELECT id, nombre FROM categorias WHERE activo = TRUE ORDER BY nombre", conn)
+            depositos_df = pd.read_sql_query("SELECT id, nombre FROM depositos WHERE activo = TRUE ORDER BY nombre", conn)
+            conn.close()
+
+            if not elementos_df.empty:
+                elemento_seleccionado = st.selectbox(
+                    "Seleccione un elemento:",
+                    options=elementos_df['id'].tolist(),
+                    format_func=lambda x: f"{elementos_df[elementos_df['id'] == x]['codigo'].iloc[0]} - {elementos_df[elementos_df['id'] == x]['nombre'].iloc[0]}"
+                )
+
+                elemento_data = elementos_df[elementos_df['id'] == elemento_seleccionado].iloc[0]
+
+                col1, col2 = st.columns(2)
+
+                # EDITAR
+                with col1:
+                    st.subheader("✏️ Editar Elemento")
+                    with st.form("editar_elemento_form"):
+                        edit_codigo = st.text_input("Código*", value=elemento_data['codigo'])
+                        edit_nombre = st.text_input("Nombre*", value=elemento_data['nombre'])
+
+                        if not categorias_df.empty:
+                            cat_index = categorias_df[categorias_df['id'] == elemento_data['categoria_id']].index[0]
+                            edit_categoria_id = st.selectbox(
+                                "Categoría*",
+                                options=categorias_df['id'].tolist(),
+                                index=cat_index,
+                                format_func=lambda x: categorias_df[categorias_df['id'] == x]['nombre'].iloc[0]
+                            )
+
+                        if not depositos_df.empty:
+                            dep_index = depositos_df[depositos_df['id'] == elemento_data['deposito_id']].index[0]
+                            edit_deposito_id = st.selectbox(
+                                "Depósito*",
+                                options=depositos_df['id'].tolist(),
+                                index=dep_index,
+                                format_func=lambda x: depositos_df[depositos_df['id'] == x]['nombre'].iloc[0]
+                            )
+
+                        estados = ["disponible", "prestado", "mantenimiento", "dado_de_baja"]
+                        estado_index = estados.index(elemento_data['estado']) if elemento_data['estado'] in estados else 0
+                        edit_estado = st.selectbox("Estado", options=estados, index=estado_index)
+
+                        edit_marca = st.text_input("Marca", value=elemento_data['marca'] or "")
+                        edit_modelo = st.text_input("Modelo", value=elemento_data['modelo'] or "")
+                        edit_numero_serie = st.text_input("Número de Serie", value=elemento_data['numero_serie'] or "")
+                        edit_fecha_ingreso = st.date_input(
+                            "Fecha de Ingreso*",
+                            value=elemento_data['fecha_ingreso'] if pd.notna(elemento_data['fecha_ingreso']) else date.today(),
+                            max_value=date.today()
+                        )
+                        edit_descripcion = st.text_area("Descripción", value=elemento_data['descripcion'] or "")
+                        edit_observaciones = st.text_area("Observaciones", value=elemento_data['observaciones'] or "")
+
+                        if st.form_submit_button("💾 Guardar Cambios"):
+                            if edit_codigo and edit_nombre and edit_categoria_id and edit_deposito_id:
+                                try:
+                                    conn = db.get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute("""
+                                        UPDATE elementos
+                                        SET codigo = %s, nombre = %s, categoria_id = %s, deposito_id = %s,
+                                            estado = %s, marca = %s, modelo = %s, numero_serie = %s,
+                                            fecha_ingreso = %s, descripcion = %s, observaciones = %s
+                                        WHERE id = %s
+                                    """, (edit_codigo, edit_nombre, edit_categoria_id, edit_deposito_id,
+                                         edit_estado, edit_marca, edit_modelo, edit_numero_serie,
+                                         edit_fecha_ingreso, edit_descripcion, edit_observaciones,
+                                         elemento_seleccionado))
+                                    conn.commit()
+                                    cursor.close()
+                                    conn.close()
+                                    st.success("✅ Elemento actualizado exitosamente")
+                                    st.rerun()
+                                except psycopg2.IntegrityError:
+                                    st.error("❌ Ya existe un elemento con ese código")
+                                    conn.rollback()
+                                    cursor.close()
+                                    conn.close()
+                                except Exception as e:
+                                    st.error(f"❌ Error al actualizar: {e}")
+                                    conn.rollback()
+                                    cursor.close()
+                                    conn.close()
+                            else:
+                                st.error("❌ Completa todos los campos obligatorios (*)")
+
+                # ELIMINAR
+                with col2:
+                    st.subheader("🗑️ Eliminar Elemento")
+
+                    cant_prestamos = int(elemento_data['cant_prestamos'])
+                    cant_historial = int(elemento_data['cant_historial'])
+
+                    tiene_relaciones = cant_prestamos > 0 or cant_historial > 0
+
+                    if tiene_relaciones:
+                        st.warning("⚠️ Este elemento tiene datos asociados:")
+                        if cant_prestamos > 0:
+                            st.error(f"❌ {cant_prestamos} préstamo(s) registrado(s)")
+                        if cant_historial > 0:
+                            st.error(f"❌ {cant_historial} registro(s) de historial")
+                        st.info("💡 No se puede eliminar un elemento con préstamos o historial asociado")
+                    else:
+                        st.info("✅ Este elemento no tiene datos asociados y puede ser eliminado")
+
+                        with st.form("eliminar_elemento_form"):
+                            st.warning(f"¿Está seguro de eliminar el elemento **{elemento_data['codigo']} - {elemento_data['nombre']}**?")
+                            confirmacion = st.checkbox("Confirmo que deseo eliminar este elemento")
+
+                            if st.form_submit_button("🗑️ Eliminar Elemento", type="primary"):
+                                if confirmacion:
+                                    try:
+                                        conn = db.get_connection()
+                                        cursor = conn.cursor()
+                                        cursor.execute("""
+                                            UPDATE elementos SET activo = FALSE WHERE id = %s
+                                        """, (elemento_seleccionado,))
+                                        conn.commit()
+                                        cursor.close()
+                                        conn.close()
+                                        st.success("✅ Elemento eliminado exitosamente")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error al eliminar: {e}")
+                                        conn.rollback()
+                                        cursor.close()
+                                        conn.close()
+                                else:
+                                    st.error("❌ Debe confirmar la eliminación")
+            else:
+                st.info("📭 No hay elementos registrados")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
 def gestionar_prestamos():
     """Sistema de Reservas y Préstamos - Hospitalarios crean reservas, Admins confirman entregas"""
@@ -1297,16 +1708,16 @@ def ver_mis_reservas():
         st.error(f"❌ Error al cargar reservas: {e}")
 
 def gestionar_depositos():
-    """Gestión de depósitos - Solo Admin"""
+    """Gestión de depósitos - ABM completo con validaciones de integridad"""
     if not auth_manager.require_permission('admin', "🚫 Solo el Gran Arquitecto puede gestionar depósitos"):
         return
 
     st.header("🏢 Gestión de Depósitos")
 
-    col1, col2 = st.columns([1, 2])
+    tab1, tab2, tab3 = st.tabs(["➕ Nuevo Depósito", "📋 Listado", "✏️ Editar/Eliminar"])
 
-    with col1:
-        st.subheader("Nuevo Depósito")
+    # TAB 1: ALTA - Nuevo Depósito
+    with tab1:
         with st.form("deposito_form"):
             nombre = st.text_input("Nombre del Depósito*")
             direccion = st.text_area("Dirección")
@@ -1341,25 +1752,143 @@ def gestionar_depositos():
                 else:
                     st.error("❌ El nombre del depósito es obligatorio")
 
-    with col2:
-        st.subheader("Depósitos Registrados")
+    # TAB 2: LISTADO
+    with tab2:
         try:
             conn = db.get_connection()
             depositos_df = pd.read_sql_query("""
-                SELECT nombre, direccion, responsable, telefono, email
-                FROM depositos
-                WHERE activo = TRUE
-                ORDER BY nombre
+                SELECT d.id, d.nombre, d.direccion, d.responsable, d.telefono, d.email,
+                       COUNT(e.id) as cant_elementos
+                FROM depositos d
+                LEFT JOIN elementos e ON d.id = e.deposito_id AND e.activo = TRUE
+                WHERE d.activo = TRUE
+                GROUP BY d.id
+                ORDER BY d.nombre
             """, conn)
             conn.close()
 
             if not depositos_df.empty:
-                st.dataframe(depositos_df, use_container_width=True)
+                display_df = depositos_df[['nombre', 'direccion', 'responsable', 'telefono', 'email', 'cant_elementos']]
+                display_df.columns = ['Nombre', 'Dirección', 'Responsable', 'Teléfono', 'Email', 'Elementos']
+                st.dataframe(display_df, use_container_width=True)
                 st.caption(f"📊 Total de depósitos: {len(depositos_df)}")
             else:
-                st.info("No hay depósitos registrados")
+                st.info("📭 No hay depósitos registrados")
         except Exception as e:
             st.error(f"❌ Error al cargar depósitos: {e}")
+
+    # TAB 3: MODIFICACIÓN y BAJA
+    with tab3:
+        try:
+            conn = db.get_connection()
+            depositos_df = pd.read_sql_query("""
+                SELECT d.*,
+                       (SELECT COUNT(*) FROM elementos e WHERE e.deposito_id = d.id AND e.activo = TRUE) as cant_elementos,
+                       (SELECT COUNT(*) FROM prestamos p WHERE p.deposito_devolucion_id = d.id) as cant_devoluciones
+                FROM depositos d
+                WHERE d.activo = TRUE
+                ORDER BY d.nombre
+            """, conn)
+            conn.close()
+
+            if not depositos_df.empty:
+                deposito_seleccionado = st.selectbox(
+                    "Seleccione un depósito:",
+                    options=depositos_df['id'].tolist(),
+                    format_func=lambda x: depositos_df[depositos_df['id'] == x]['nombre'].iloc[0]
+                )
+
+                deposito_data = depositos_df[depositos_df['id'] == deposito_seleccionado].iloc[0]
+
+                col1, col2 = st.columns(2)
+
+                # EDITAR
+                with col1:
+                    st.subheader("✏️ Editar Depósito")
+                    with st.form("editar_deposito_form"):
+                        edit_nombre = st.text_input("Nombre*", value=deposito_data['nombre'])
+                        edit_direccion = st.text_area("Dirección", value=deposito_data['direccion'] or "")
+                        edit_responsable = st.text_input("Responsable", value=deposito_data['responsable'] or "")
+                        edit_telefono = st.text_input("Teléfono", value=deposito_data['telefono'] or "")
+                        edit_email = st.text_input("Email", value=deposito_data['email'] or "")
+
+                        if st.form_submit_button("💾 Guardar Cambios"):
+                            if edit_nombre:
+                                try:
+                                    conn = db.get_connection()
+                                    cursor = conn.cursor()
+                                    cursor.execute("""
+                                        UPDATE depositos
+                                        SET nombre = %s, direccion = %s, responsable = %s,
+                                            telefono = %s, email = %s
+                                        WHERE id = %s
+                                    """, (edit_nombre, edit_direccion, edit_responsable,
+                                         edit_telefono, edit_email, deposito_seleccionado))
+                                    conn.commit()
+                                    cursor.close()
+                                    conn.close()
+                                    st.success("✅ Depósito actualizado exitosamente")
+                                    st.rerun()
+                                except psycopg2.IntegrityError:
+                                    st.error("❌ Ya existe un depósito con ese nombre")
+                                    conn.rollback()
+                                    cursor.close()
+                                    conn.close()
+                                except Exception as e:
+                                    st.error(f"❌ Error al actualizar: {e}")
+                                    conn.rollback()
+                                    cursor.close()
+                                    conn.close()
+                            else:
+                                st.error("❌ El nombre es obligatorio")
+
+                # ELIMINAR
+                with col2:
+                    st.subheader("🗑️ Eliminar Depósito")
+
+                    cant_elementos = int(deposito_data['cant_elementos'])
+                    cant_devoluciones = int(deposito_data['cant_devoluciones'])
+
+                    tiene_relaciones = cant_elementos > 0 or cant_devoluciones > 0
+
+                    if tiene_relaciones:
+                        st.warning("⚠️ Este depósito tiene datos asociados:")
+                        if cant_elementos > 0:
+                            st.error(f"❌ {cant_elementos} elemento(s) almacenado(s)")
+                        if cant_devoluciones > 0:
+                            st.error(f"❌ {cant_devoluciones} devolución/es registrada(s)")
+                        st.info("💡 Primero debe reubicar los elementos o eliminar los registros asociados")
+                    else:
+                        st.info("✅ Este depósito no tiene datos asociados y puede ser eliminado")
+
+                        with st.form("eliminar_deposito_form"):
+                            st.warning(f"¿Está seguro de eliminar el depósito **{deposito_data['nombre']}**?")
+                            confirmacion = st.checkbox("Confirmo que deseo eliminar este depósito")
+
+                            if st.form_submit_button("🗑️ Eliminar Depósito", type="primary"):
+                                if confirmacion:
+                                    try:
+                                        conn = db.get_connection()
+                                        cursor = conn.cursor()
+                                        cursor.execute("""
+                                            UPDATE depositos SET activo = FALSE WHERE id = %s
+                                        """, (deposito_seleccionado,))
+                                        conn.commit()
+                                        cursor.close()
+                                        conn.close()
+                                        st.success("✅ Depósito eliminado exitosamente")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"❌ Error al eliminar: {e}")
+                                        conn.rollback()
+                                        cursor.close()
+                                        conn.close()
+                                else:
+                                    st.error("❌ Debe confirmar la eliminación")
+            else:
+                st.info("📭 No hay depósitos registrados")
+        except Exception as e:
+            st.error(f"❌ Error: {e}")
 
 def mostrar_dashboard():
     """Dashboard con estadísticas y gráficos - Todos pueden ver"""
