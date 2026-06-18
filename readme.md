@@ -2,6 +2,13 @@
 
 Sistema de gestión integral para el control de inventario y préstamos de elementos ortopédicos destinado específicamente a organizaciones masónicas filantrópicas.
 
+## Índice de Automatizaciones
+
+| Script / Módulo | Propósito | Dependencias |
+|-----------------|-----------|--------------|
+| app.py | App Streamlit de gestión de inventario, préstamos y devoluciones BEO | streamlit, pandas, plotly, psycopg2-binary, SQLAlchemy |
+| cargar_logias_seguro.py | Carga masiva de logias a la base de datos leyendo credenciales desde secrets.toml | psycopg2-binary, toml |
+
 ## ✨ Características Principales
 
 ### 🏛️ Gestión Masónica Completa
